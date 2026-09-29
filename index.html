@@ -34,10 +34,46 @@
           <div class="ring" id="progressRing"><span id="ringPct">0%</span></div>
         </div>
 
-        <div class="stat-grid">
+        <div class="stat-grid four">
           <div class="stat card"><b id="dueCount">0</b><span>今日の復習</span></div>
           <div class="stat card"><b id="weakCount">0</b><span>苦手</span></div>
           <div class="stat card"><b id="starCount">0</b><span>お気に入り</span></div>
+          <div class="stat card"><b id="streakCount">0</b><span>連続日数</span></div>
+        </div>
+
+        <div class="card section-card planner-card">
+          <div class="section-head">
+            <div><div class="eyebrow">DAILY PLAN</div><h3>目標と今日のノルマ</h3></div>
+            <span class="status-pill" id="paceStatus">未設定</span>
+          </div>
+          <div class="plan-grid">
+            <label>目標日<input id="targetDate" type="date"></label>
+            <label>1日の新規ノルマ<input id="dailyQuota" type="number" min="1" max="500" value="30"></label>
+          </div>
+          <div class="plan-summary">
+            <div><span>目標日まで</span><b id="daysLeft">—</b><small>日</small></div>
+            <div><span>未着手</span><b id="unseenCount">1935</b><small>語</small></div>
+            <div><span>必要ペース</span><b id="neededPerDay">—</b><small>語/日</small></div>
+          </div>
+          <div class="daily-goal-row">
+            <div>
+              <b>今日 <span id="todayNewCount">0</span> / <span id="todayQuotaText">30</span> 語</b>
+              <div class="bar tall"><i id="dailyGoalBar"></i></div>
+            </div>
+            <button class="secondary compact" id="autoQuotaBtn">自動計算</button>
+          </div>
+          <div class="primary-actions plan-actions">
+            <button class="primary" id="startTodayBtn">今日のノルマを始める</button>
+            <button class="secondary" id="startTripleBtn">3回クリアに挑戦</button>
+          </div>
+          <p class="tiny" id="planHint">目標日を設定すると、残り語数から1日あたりの必要数を計算します。</p>
+        </div>
+
+        <div class="card section-card challenge-summary">
+          <div class="section-head"><div><div class="eyebrow">3× CLEAR</div><h3>全範囲ランダム定着</h3></div><b id="triplePct">0%</b></div>
+          <div class="bar tall"><i id="tripleBar"></i></div>
+          <div class="mini-summary"><span><b id="tripleCleared">0</b> 語クリア</span><span>残り正解 <b id="tripleRemainingHits">5805</b> 回</span></div>
+          <p class="tiny">全1935語からランダム出題。各単語を3回正解すると、その単語はこのモードでクリアになります。不正解でも正解回数は減りません。</p>
         </div>
 
         <div class="card section-card">
@@ -89,6 +125,7 @@
           <div class="study-progress"><span id="studyIndex">1</span> / <span id="studyTotal">20</span><div class="bar"><i id="studyBar"></i></div></div>
           <button class="icon-btn" id="studyStarBtn">☆</button>
         </div>
+        <div class="session-banner hidden" id="studySessionBanner"></div>
         <div class="flashcard" id="flashcard" tabindex="0">
           <div class="card-side">
             <div class="word-no" id="studyWordNo">No. 1</div>
@@ -111,13 +148,16 @@
           <div class="study-progress"><span id="quizIndex">1</span> / <span id="quizTotal">20</span><div class="bar"><i id="quizBar"></i></div></div>
           <button class="icon-btn" id="quizStarBtn">☆</button>
         </div>
-        <div class="quiz-mode segmented">
+        <div class="quiz-mode segmented wrap">
           <button data-mode="en-ja" class="active">英→日</button>
           <button data-mode="ja-en">日→英</button>
           <button data-mode="spell">スペル</button>
+          <button data-mode="multi">意味を全部</button>
+          <button data-mode="sense">意味別</button>
         </div>
         <div class="quiz-card card">
           <div class="word-no" id="quizWordNo"></div>
+          <div class="quiz-kicker hidden" id="quizKicker"></div>
           <div class="quiz-prompt" id="quizPrompt"></div>
           <button class="speak-btn" id="quizSpeakBtn">🔊 発音</button>
           <div id="choiceArea" class="choices"></div>
@@ -125,8 +165,27 @@
             <input id="spellInput" autocomplete="off" autocapitalize="off" spellcheck="false" placeholder="英単語を入力">
             <button class="primary" id="spellSubmit">答える</button>
           </div>
+          <button class="primary hidden" id="multiSubmitBtn">選んだ意味で答える</button>
           <div id="quizFeedback" class="feedback hidden"></div>
           <button class="primary hidden" id="nextQuizBtn">次へ</button>
+        </div>
+      </section>
+
+      <section class="view" id="challengeView">
+        <div class="study-top">
+          <button class="back-btn" data-go="home">‹</button>
+          <div class="study-progress"><span id="challengeClearedNow">0</span> 語クリア<div class="bar"><i id="challengeBar"></i></div></div>
+          <button class="icon-btn" id="challengeStarBtn">☆</button>
+        </div>
+        <div class="session-banner">全範囲からランダム出題 · 3回正解でクリア</div>
+        <div class="quiz-card card">
+          <div class="word-no" id="challengeWordNo"></div>
+          <div class="challenge-hit" id="challengeHit">0 / 3</div>
+          <div class="quiz-prompt" id="challengePrompt"></div>
+          <button class="speak-btn" id="challengeSpeakBtn">🔊 発音</button>
+          <div id="challengeChoices" class="choices"></div>
+          <div id="challengeFeedback" class="feedback hidden"></div>
+          <button class="primary hidden" id="nextChallengeBtn">次のランダム問題</button>
         </div>
       </section>
 
@@ -144,6 +203,23 @@
             <div><b id="statsSeen">0</b><span>学習済み</span></div>
             <div><b id="statsCorrect">0</b><span>正解</span></div>
             <div><b id="statsWrong">0</b><span>不正解</span></div>
+          </div>
+        </div>
+        <div class="card section-card">
+          <div class="eyebrow">CONSISTENCY</div><h3>継続</h3>
+          <div class="big-stats">
+            <div><b id="statsStreak">0</b><span>連続日数</span></div>
+            <div><b id="statsToday">0</b><span>今日の回答</span></div>
+            <div><b id="statsAccuracy">—</b><span>正答率</span></div>
+          </div>
+          <div id="weekStrip" class="week-strip"></div>
+        </div>
+        <div class="card section-card">
+          <div class="eyebrow">POLYSEMY</div><h3>多義語の定着</h3>
+          <p class="tiny stats-copy">「意味別」モードで、番号付きの語義を個別に正解した記録です。</p>
+          <div class="big-stats two">
+            <div><b id="senseTouched">0</b><span>語義を学習</span></div>
+            <div><b id="sensePerfectWords">0</b><span>全語義を正解済み</span></div>
           </div>
         </div>
         <div class="card section-card">
