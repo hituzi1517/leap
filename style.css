@@ -1,4 +1,5 @@
 :root{
+  --app-vh:100dvh;--app-vtop:0px;
   --bg:#f4f5f7;--surface:#fff;--surface2:#f1f3f6;--text:#111827;--muted:#687385;--line:#e3e7ed;
   --accent:#4f46e5;--accent-rgb:79,70,229;--accentText:#fff;--shadow:0 14px 38px rgba(15,23,42,.08);
   --good:#07835b;--goodbg:#dcfce7;--bad:#b42318;--badbg:#fee4e2
@@ -10,6 +11,7 @@
 *{box-sizing:border-box}
 html,body{margin:0;min-height:100%;font-family:-apple-system,BlinkMacSystemFont,"Segoe UI","Noto Sans JP",sans-serif;background:var(--bg);color:var(--text);-webkit-text-size-adjust:100%}
 body{padding-bottom:88px}
+body.quiz-open{overflow:hidden;overscroll-behavior:none;touch-action:manipulation}
 button,input{font:inherit}button{cursor:pointer;-webkit-tap-highlight-color:transparent}button:disabled{cursor:default}
 .topbar{height:78px;display:flex;justify-content:space-between;align-items:center;padding:calc(env(safe-area-inset-top) + 12px) 18px 10px}
 .topbar h1{margin:1px 0 0;font-size:22px}.eyebrow{font-size:10px;letter-spacing:.14em;color:var(--muted);font-weight:850}
@@ -37,8 +39,8 @@ main{max-width:760px;margin:auto;padding:10px 14px 34px}.view{display:none}.view
 .data-actions{display:flex;gap:8px;flex-wrap:wrap}.file-label{display:inline-flex;align-items:center}.file-label input{display:none}.hidden{display:none!important}
 
 /* Full-screen quiz: no page scrolling needed in normal phone layouts. */
-.mission-overlay.active{position:fixed;inset:0;z-index:50;background:var(--bg);display:block;padding:0!important}
-.mission-shell{width:min(760px,100%);height:100dvh;margin:auto;padding:max(8px,env(safe-area-inset-top)) 10px max(8px,env(safe-area-inset-bottom));display:grid;grid-template-rows:auto minmax(0,1fr) auto;gap:8px;overflow:hidden}
+.mission-overlay.active{position:fixed;left:0;right:0;top:var(--app-vtop,0px);bottom:auto;height:var(--app-vh,100dvh);z-index:50;background:var(--bg);display:block;padding:0!important;overflow:hidden}
+.mission-shell{width:min(760px,100%);height:100%;margin:auto;padding:calc(env(safe-area-inset-top,0px) + 10px) 10px max(4px,env(safe-area-inset-bottom,0px));display:grid;grid-template-rows:auto minmax(0,1fr) auto;gap:7px;overflow:hidden}
 .mission-head{display:grid;grid-template-columns:42px 1fr 42px;gap:8px;align-items:center;min-height:46px}
 .mission-meter{text-align:center;color:var(--muted);font-size:12px}.mission-meter b{color:var(--text)}.mission-meter .bar{margin:5px auto 0;max-width:320px}
 .direction-badge{display:inline-flex;margin-right:5px;padding:4px 7px;border-radius:999px;background:rgba(var(--accent-rgb),.12);color:var(--accent);font-size:10px;font-weight:850}
@@ -72,7 +74,7 @@ main{max-width:760px;margin:auto;padding:10px 14px 34px}.view{display:none}.view
   .stat-grid{grid-template-columns:repeat(2,1fr)}.plan-grid{grid-template-columns:1fr 1fr}.plan-summary b{font-size:18px}.daily-goal-row{grid-template-columns:1fr}.compact{width:100%}.hard-item{display:grid}.complete-grid b{font-size:16px}
 }
 @media(max-height:720px){
-  .mission-shell{gap:5px;padding-top:max(5px,env(safe-area-inset-top));padding-bottom:max(5px,env(safe-area-inset-bottom))}
+  .mission-shell{gap:4px;padding-top:calc(env(safe-area-inset-top,0px) + 7px);padding-bottom:max(3px,env(safe-area-inset-bottom,0px))}
   .quiz-panel{padding:8px;gap:5px;grid-template-rows:auto minmax(65px,.6fr) minmax(0,2.3fr) auto 43px}
   .quiz-prompt{font-size:clamp(24px,6.6vw,40px)}.quiz-prompt.jp{font-size:clamp(18px,5vw,28px)}
   .choice-card{padding:7px}.choice-card .choice-main{font-size:14px}.choice-card .choice-main.en{font-size:16px}.choice-card .choice-reveal{font-size:13px;margin-top:4px;padding-top:4px}

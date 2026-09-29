@@ -22,3 +22,7 @@ iPhone/iPadではSafariで公開URLを開き、共有 →「ホーム画面に�
 
 ## 進捗の互換性
 従来版と同じ localStorage キーを利用しているため、同じGitHub PagesのURLを上書き更新した場合は既存進捗を引き継げます。
+
+
+## iPhone 17 / Safari表示領域修正
+クイズ画面では VisualViewport から実際の表示高さと上端位置を取得し、Safari UIやホーム画面PWAのセーフエリアに追従します。上が隠れて下が余る症状を抑えるため、表示開始・リサイズ・画面回転・Safari UI変化時に再計算します。

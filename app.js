@@ -45,6 +45,19 @@ function shuffle(arr){ const a=[...arr]; for(let i=a.length-1;i>0;i--){ const j=
 function sample(arr){ return arr[Math.floor(Math.random()*arr.length)]; }
 function escapeHTML(s){ return String(s).replace(/[&<>"']/g,c=>({"&":"&amp;","<":"&lt;",">":"&gt;",'"':"&quot;","'":"&#039;"}[c])); }
 function toast(msg){ const el=$("#toast"); el.textContent=msg; el.classList.add("show"); clearTimeout(toast.t); toast.t=setTimeout(()=>el.classList.remove("show"),1600); }
+function syncVisualViewport(){
+  const vv=window.visualViewport;
+  const h=vv ? vv.height : window.innerHeight;
+  const top=vv ? vv.offsetTop : 0;
+  document.documentElement.style.setProperty("--app-vh", `${Math.round(h)}px`);
+  document.documentElement.style.setProperty("--app-vtop", `${Math.max(0,Math.round(top))}px`);
+}
+function scheduleViewportSync(){
+  syncVisualViewport();
+  requestAnimationFrame(syncVisualViewport);
+  setTimeout(syncVisualViewport,120);
+  setTimeout(syncVisualViewport,420);
+}
 
 function setRandomAccent(force=false){
   const prev=localStorage.getItem("vocab1935-last-accent");
@@ -182,7 +195,7 @@ function autoQuota(){
 }
 function go(view){
   $$(".view").forEach(v=>v.classList.remove("active")); const el=$(`#${view}View`); if(el) el.classList.add("active");
-  document.body.classList.toggle("quiz-open",view==="mission");
+  document.body.classList.toggle("quiz-open",view==="mission"); if(view==="mission") scheduleViewportSync();
   $$(".bottom-nav button").forEach(b=>b.classList.toggle("active",b.dataset.view===view));
   if(view!=="mission") window.scrollTo({top:0,behavior:"instant"});
   if(view==="home") refreshHome(); if(view==="search") renderSearch(); if(view==="stats") renderStats();
@@ -401,4 +414,13 @@ $("#themeBtn").onclick=cycleTheme; $("#accentBtn").onclick=()=>{ setRandomAccent
 $$("#modeSegment button").forEach(b=>b.onclick=()=>setMode(b.dataset.mode));
 $$('[data-go]').forEach(b=>b.onclick=()=>go(b.dataset.go));
 $$(".bottom-nav button").forEach(b=>b.onclick=()=>go(b.dataset.view));
+scheduleViewportSync();
+window.addEventListener("resize",scheduleViewportSync,{passive:true});
+window.addEventListener("orientationchange",scheduleViewportSync,{passive:true});
+window.addEventListener("pageshow",scheduleViewportSync,{passive:true});
+document.addEventListener("visibilitychange",()=>{ if(!document.hidden) scheduleViewportSync(); });
+if(window.visualViewport){
+  window.visualViewport.addEventListener("resize",scheduleViewportSync,{passive:true});
+  window.visualViewport.addEventListener("scroll",scheduleViewportSync,{passive:true});
+}
 if("serviceWorker" in navigator) window.addEventListener("load",()=>navigator.serviceWorker.register("sw.js").catch(()=>{}));
