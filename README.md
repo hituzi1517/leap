@@ -26,3 +26,11 @@ iPhone/iPadではSafariで公開URLを開き、共有 →「ホーム画面に�
 
 ## iPhone 17 / Safari表示領域修正
 クイズ画面では VisualViewport から実際の表示高さと上端位置を取得し、Safari UIやホーム画面PWAのセーフエリアに追従します。上が隠れて下が余る症状を抑えるため、表示開始・リサイズ・画面回転・Safari UI変化時に再計算します。
+
+
+## v6: iPhone ホーム画面追加(PWA)表示修正
+- standalone時は `visualViewport.offsetTop` を使用せず、`window.innerHeight` をアプリ表示領域として利用。
+- status bar styleを `default` に変更し、上部コンテンツがステータスバー裏へ入らないよう修正。
+- 固定78pxのヘッダーにsafe-areaを押し込んでいた問題を修正。
+- Safari表示では従来どおりVisual Viewport追従。
+- 進捗保存キーは変更していません。

@@ -4,6 +4,8 @@ const SETTINGS_KEY = "vocab1935-settings-v1";
 const ACTIVITY_KEY = "vocab1935-activity-v2";
 const DAY = 86400000;
 const CIRCLED = "①②③④⑤⑥⑦⑧⑨⑩⑪⑫⑬⑭⑮⑯⑰⑱⑲⑳";
+const IS_STANDALONE = !!((window.matchMedia && window.matchMedia("(display-mode: standalone)").matches) || window.navigator.standalone === true);
+document.documentElement.classList.toggle("pwa-standalone", IS_STANDALONE);
 const $ = s => document.querySelector(s);
 const $$ = s => [...document.querySelectorAll(s)];
 
@@ -46,6 +48,15 @@ function sample(arr){ return arr[Math.floor(Math.random()*arr.length)]; }
 function escapeHTML(s){ return String(s).replace(/[&<>"']/g,c=>({"&":"&amp;","<":"&lt;",">":"&gt;",'"':"&quot;","'":"&#039;"}[c])); }
 function toast(msg){ const el=$("#toast"); el.textContent=msg; el.classList.add("show"); clearTimeout(toast.t); toast.t=setTimeout(()=>el.classList.remove("show"),1600); }
 function syncVisualViewport(){
+  // Installed iOS PWAs already have their own stable standalone viewport.
+  // visualViewport can report a shorter inset viewport there, which caused
+  // a blank strip at the bottom and pushed content under the status bar.
+  if(IS_STANDALONE){
+    const h = window.innerHeight || document.documentElement.clientHeight;
+    document.documentElement.style.setProperty("--app-vh", `${Math.round(h)}px`);
+    document.documentElement.style.setProperty("--app-vtop", "0px");
+    return;
+  }
   const vv=window.visualViewport;
   const h=vv ? vv.height : window.innerHeight;
   const top=vv ? vv.offsetTop : 0;
@@ -67,7 +78,6 @@ function setRandomAccent(force=false){
   document.documentElement.style.setProperty("--accent",hex);
   document.documentElement.style.setProperty("--accent-rgb",rgb);
   document.documentElement.style.setProperty("--accentText",isLight(hex)?"#111827":"#ffffff");
-  const meta=$("#themeColorMeta"); if(meta) meta.setAttribute("content",hex);
   localStorage.setItem("vocab1935-last-accent",hex);
 }
 function isLight(hex){
@@ -394,7 +404,7 @@ function resetProgress(){
     progress={}; activity={}; localStorage.removeItem(KEY); localStorage.removeItem(ACTIVITY_KEY); persist(); refreshHome(); toast("リセットしました");
   }
 }
-function applyTheme(){ const dark=settings.theme==="dark"||(settings.theme==="system"&&matchMedia("(prefers-color-scheme: dark)").matches); document.documentElement.dataset.theme=dark?"dark":"light"; }
+function applyTheme(){ const dark=settings.theme==="dark"||(settings.theme==="system"&&matchMedia("(prefers-color-scheme: dark)").matches); document.documentElement.dataset.theme=dark?"dark":"light"; const meta=$("#themeColorMeta"); if(meta) meta.setAttribute("content",dark?"#080d16":"#f4f5f7"); }
 function cycleTheme(){ settings.theme=settings.theme==="system"?"light":settings.theme==="light"?"dark":"system"; persist(); applyTheme(); toast(`表示: ${settings.theme==="system"?"端末設定":settings.theme==="light"?"ライト":"ダーク"}`); }
 
 buildUnits();
@@ -419,7 +429,7 @@ window.addEventListener("resize",scheduleViewportSync,{passive:true});
 window.addEventListener("orientationchange",scheduleViewportSync,{passive:true});
 window.addEventListener("pageshow",scheduleViewportSync,{passive:true});
 document.addEventListener("visibilitychange",()=>{ if(!document.hidden) scheduleViewportSync(); });
-if(window.visualViewport){
+if(window.visualViewport && !IS_STANDALONE){
   window.visualViewport.addEventListener("resize",scheduleViewportSync,{passive:true});
   window.visualViewport.addEventListener("scroll",scheduleViewportSync,{passive:true});
 }
