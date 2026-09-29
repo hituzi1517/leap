@@ -1,0 +1,169 @@
+<!doctype html>
+<html lang="ja">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width,initial-scale=1,viewport-fit=cover">
+  <meta name="theme-color" content="#111827">
+  <meta name="apple-mobile-web-app-capable" content="yes">
+  <meta name="apple-mobile-web-app-status-bar-style" content="black-translucent">
+  <meta name="apple-mobile-web-app-title" content="Vocab 1935">
+  <title>Vocab 1935</title>
+  <link rel="manifest" href="manifest.webmanifest">
+  <link rel="apple-touch-icon" href="icons/icon-192.png">
+  <link rel="icon" href="icons/icon-192.png">
+  <link rel="stylesheet" href="style.css">
+</head>
+<body>
+  <div id="app">
+    <header class="topbar">
+      <div>
+        <div class="eyebrow">ENGLISH VOCABULARY</div>
+        <h1>Vocab 1935</h1>
+      </div>
+      <button class="icon-btn" id="themeBtn" aria-label="テーマ切替">◐</button>
+    </header>
+
+    <main>
+      <section class="view active" id="homeView">
+        <div class="hero card">
+          <div>
+            <div class="eyebrow">YOUR PROGRESS</div>
+            <h2><span id="progressPct">0</span>%</h2>
+            <p><span id="masteredCount">0</span> / <span id="totalCount">1935</span> 語を習得</p>
+          </div>
+          <div class="ring" id="progressRing"><span id="ringPct">0%</span></div>
+        </div>
+
+        <div class="stat-grid">
+          <div class="stat card"><b id="dueCount">0</b><span>今日の復習</span></div>
+          <div class="stat card"><b id="weakCount">0</b><span>苦手</span></div>
+          <div class="stat card"><b id="starCount">0</b><span>お気に入り</span></div>
+        </div>
+
+        <div class="card section-card">
+          <div class="section-head"><div><div class="eyebrow">STUDY RANGE</div><h3>学習範囲</h3></div></div>
+          <div class="range-row">
+            <select id="rangePreset" aria-label="範囲プリセット"></select>
+            <button class="secondary" id="applyPresetBtn">適用</button>
+          </div>
+          <div class="range-custom">
+            <label>開始 <input id="rangeStart" type="number" min="1" max="1935" value="1"></label>
+            <span>—</span>
+            <label>終了 <input id="rangeEnd" type="number" min="1" max="1935" value="100"></label>
+          </div>
+          <div class="segmented" id="deckFilter">
+            <button data-filter="all" class="active">すべて</button>
+            <button data-filter="new">未学習</button>
+            <button data-filter="due">復習</button>
+            <button data-filter="weak">苦手</button>
+            <button data-filter="starred">★</button>
+          </div>
+          <div class="count-row">
+            <label>1セット
+              <select id="sessionSize">
+                <option>10</option><option selected>20</option><option>30</option><option>50</option><option>100</option>
+              </select>語
+            </label>
+            <label class="switch-label"><input id="shuffleToggle" type="checkbox" checked><span>シャッフル</span></label>
+          </div>
+          <div class="primary-actions">
+            <button class="primary" id="startStudyBtn">単語カードを始める</button>
+            <button class="secondary" id="startQuizBtn">テストを始める</button>
+          </div>
+          <p class="tiny">学習記録はこの端末のブラウザ内にだけ保存されます。</p>
+        </div>
+
+        <div class="card section-card">
+          <div class="section-head"><div><div class="eyebrow">DATA</div><h3>学習データ</h3></div></div>
+          <div class="data-actions">
+            <button class="secondary" id="exportBtn">進捗を書き出す</button>
+            <label class="secondary file-label">進捗を読み込む<input id="importInput" type="file" accept="application/json"></label>
+            <button class="danger ghost" id="resetBtn">進捗をリセット</button>
+          </div>
+        </div>
+      </section>
+
+      <section class="view" id="studyView">
+        <div class="study-top">
+          <button class="back-btn" data-go="home">‹</button>
+          <div class="study-progress"><span id="studyIndex">1</span> / <span id="studyTotal">20</span><div class="bar"><i id="studyBar"></i></div></div>
+          <button class="icon-btn" id="studyStarBtn">☆</button>
+        </div>
+        <div class="flashcard" id="flashcard" tabindex="0">
+          <div class="card-side">
+            <div class="word-no" id="studyWordNo">No. 1</div>
+            <div class="study-word" id="studyFront">agree</div>
+            <button class="speak-btn" id="studySpeakBtn">🔊 発音</button>
+            <div class="tap-hint" id="tapHint">タップして意味を見る</div>
+            <div class="study-meaning hidden" id="studyBack"></div>
+          </div>
+        </div>
+        <div class="rating hidden" id="ratingButtons">
+          <button class="again" data-rating="again"><b>苦手</b><span>もう一度</span></button>
+          <button class="hard" data-rating="hard"><b>微妙</b><span>明日</span></button>
+          <button class="good" data-rating="good"><b>覚えた</b><span>間隔を延ばす</span></button>
+        </div>
+      </section>
+
+      <section class="view" id="quizView">
+        <div class="study-top">
+          <button class="back-btn" data-go="home">‹</button>
+          <div class="study-progress"><span id="quizIndex">1</span> / <span id="quizTotal">20</span><div class="bar"><i id="quizBar"></i></div></div>
+          <button class="icon-btn" id="quizStarBtn">☆</button>
+        </div>
+        <div class="quiz-mode segmented">
+          <button data-mode="en-ja" class="active">英→日</button>
+          <button data-mode="ja-en">日→英</button>
+          <button data-mode="spell">スペル</button>
+        </div>
+        <div class="quiz-card card">
+          <div class="word-no" id="quizWordNo"></div>
+          <div class="quiz-prompt" id="quizPrompt"></div>
+          <button class="speak-btn" id="quizSpeakBtn">🔊 発音</button>
+          <div id="choiceArea" class="choices"></div>
+          <div id="spellArea" class="spell-area hidden">
+            <input id="spellInput" autocomplete="off" autocapitalize="off" spellcheck="false" placeholder="英単語を入力">
+            <button class="primary" id="spellSubmit">答える</button>
+          </div>
+          <div id="quizFeedback" class="feedback hidden"></div>
+          <button class="primary hidden" id="nextQuizBtn">次へ</button>
+        </div>
+      </section>
+
+      <section class="view" id="searchView">
+        <div class="search-box card">
+          <input id="searchInput" type="search" placeholder="英単語・日本語で検索">
+        </div>
+        <div id="searchResults" class="word-list"></div>
+      </section>
+
+      <section class="view" id="statsView">
+        <div class="card section-card">
+          <div class="eyebrow">OVERVIEW</div><h3>学習状況</h3>
+          <div class="big-stats">
+            <div><b id="statsSeen">0</b><span>学習済み</span></div>
+            <div><b id="statsCorrect">0</b><span>正解</span></div>
+            <div><b id="statsWrong">0</b><span>不正解</span></div>
+          </div>
+        </div>
+        <div class="card section-card">
+          <div class="eyebrow">MASTERY</div><h3>100語ごとの習得率</h3>
+          <div id="chunkStats" class="chunk-stats"></div>
+        </div>
+      </section>
+    </main>
+
+    <nav class="bottom-nav">
+      <button data-view="home" class="active"><span>⌂</span>ホーム</button>
+      <button data-view="study"><span>▣</span>カード</button>
+      <button data-view="quiz"><span>✓</span>テスト</button>
+      <button data-view="search"><span>⌕</span>検索</button>
+      <button data-view="stats"><span>≡</span>記録</button>
+    </nav>
+  </div>
+
+  <div class="toast" id="toast"></div>
+  <script src="words.js"></script>
+  <script src="app.js"></script>
+</body>
+</html>
