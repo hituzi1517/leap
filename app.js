@@ -4,38 +4,32 @@ const SETTINGS_KEY = "vocab1935-settings-v1";
 const ACTIVITY_KEY = "vocab1935-activity-v2";
 const DAY = 86400000;
 const CIRCLED = "①②③④⑤⑥⑦⑧⑨⑩⑪⑫⑬⑭⑮⑯⑰⑱⑲⑳";
-
 const $ = s => document.querySelector(s);
 const $$ = s => [...document.querySelectorAll(s)];
 
 let progress = loadJSON(KEY, {});
 let activity = loadJSON(ACTIVITY_KEY, {});
-let settings = Object.assign({
-  start: 1, end: 100, filter: "all", size: 20, shuffle: true,
-  quizMode: "en-ja", theme: "system", targetDate: "", dailyQuota: 30
-}, loadJSON(SETTINGS_KEY, {}));
+const legacySettings = loadJSON(SETTINGS_KEY, {});
+let settings = Object.assign({ theme:"system", targetDate:"", dailyQuota:100 }, legacySettings);
+settings.dailyQuota = clamp(parseInt(settings.dailyQuota)||100, 1, 2000);
 
-let studyDeck = [], studyPos = 0, studyRevealed = false, studySessionType = "normal";
-let quizDeck = [], quizPos = 0, quizAnswered = false;
-let challengeCurrent = null, challengeAnswered = false, challengeRecent = [], challengeSessionCleared = new Set();
 const senseCache = new Map();
+let UNITS = [];
+let currentUnit = null;
+let missionAnswered = false;
+let recentUnits = [];
+let recentWords = [];
+let retryQueue = [];
+let questionNo = 0;
+let combo = 0;
+let quotaExtended = false;
 
-function loadJSON(k, fallback){
-  try { return JSON.parse(localStorage.getItem(k)) ?? fallback; } catch { return fallback; }
-}
+function loadJSON(k,fallback){ try{return JSON.parse(localStorage.getItem(k)) ?? fallback}catch{return fallback} }
 function persist(){
-  localStorage.setItem(KEY, JSON.stringify(progress));
-  localStorage.setItem(SETTINGS_KEY, JSON.stringify(settings));
-  localStorage.setItem(ACTIVITY_KEY, JSON.stringify(activity));
+  localStorage.setItem(KEY,JSON.stringify(progress));
+  localStorage.setItem(SETTINGS_KEY,JSON.stringify(settings));
+  localStorage.setItem(ACTIVITY_KEY,JSON.stringify(activity));
 }
-function save(){ persist(); refreshHome(); }
-function state(id){
-  if(!progress[id]) progress[id] = {level:0, correct:0, wrong:0, seen:0, due:0, status:"new", starred:false, tripleHits:0, senses:{}};
-  if(progress[id].tripleHits == null) progress[id].tripleHits = 0;
-  if(!progress[id].senses) progress[id].senses = {};
-  return progress[id];
-}
-function now(){ return Date.now(); }
 function clamp(n,a,b){ return Math.min(b,Math.max(a,n)); }
 function shuffle(arr){
   const a=[...arr];
@@ -43,609 +37,312 @@ function shuffle(arr){
   return a;
 }
 function sample(arr){ return arr[Math.floor(Math.random()*arr.length)]; }
-function toast(msg){
-  const el=$("#toast"); el.textContent=msg; el.classList.add("show");
-  clearTimeout(toast.t); toast.t=setTimeout(()=>el.classList.remove("show"),1800);
-}
+function escapeHTML(s){ return String(s).replace(/[&<>"']/g,c=>({"&":"&amp;","<":"&lt;",">":"&gt;",'"':"&quot;","'":"&#039;"}[c])); }
+function toast(msg){ const el=$("#toast"); el.textContent=msg; el.classList.add("show"); clearTimeout(toast.t); toast.t=setTimeout(()=>el.classList.remove("show"),1800); }
 function speak(text){
   if(!("speechSynthesis" in window)) return toast("このブラウザでは読み上げを利用できません");
-  speechSynthesis.cancel();
-  const u=new SpeechSynthesisUtterance(text); u.lang="en-US"; u.rate=.88;
-  speechSynthesis.speak(u);
+  speechSynthesis.cancel(); const u=new SpeechSynthesisUtterance(text); u.lang="en-US"; u.rate=.88; speechSynthesis.speak(u);
 }
-function cleanMeaning(s){ return s; }
-function escapeHTML(s){ return String(s).replace(/[&<>"']/g,c=>({"&":"&amp;","<":"&lt;",">":"&gt;",'"':"&quot;","'":"&#039;"}[c])); }
-function statusJP(s){return {new:"未学習",learning:"学習中",weak:"苦手",mastered:"習得"}[s]||s}
-
+function state(id){
+  if(!progress[id]) progress[id]={level:0,correct:0,wrong:0,seen:0,due:0,status:"new",starred:false,tripleHits:0,senses:{},senseHits:{}};
+  const s=progress[id];
+  if(!s.senses) s.senses={};
+  if(!s.senseHits) s.senseHits={};
+  if(s.tripleHits==null) s.tripleHits=0;
+  return s;
+}
 function localDateKey(d=new Date()){
-  const y=d.getFullYear(), m=String(d.getMonth()+1).padStart(2,"0"), day=String(d.getDate()).padStart(2,"0");
+  const y=d.getFullYear(),m=String(d.getMonth()+1).padStart(2,"0"),day=String(d.getDate()).padStart(2,"0");
   return `${y}-${m}-${day}`;
 }
-function dateFromKey(key){
-  const [y,m,d]=key.split("-").map(Number);
-  return new Date(y,m-1,d);
+function dateFromKey(k){ const [y,m,d]=k.split("-").map(Number); return new Date(y,m-1,d); }
+function shiftDateKey(k,n){ const d=dateFromKey(k); d.setDate(d.getDate()+n); return localDateKey(d); }
+function activityEntry(k=localDateKey()){
+  if(!activity[k]) activity[k]={answered:0,correct:0,wrong:0,newIds:[],missionHits:0};
+  if(activity[k].missionHits==null) activity[k].missionHits=0;
+  return activity[k];
 }
-function shiftDateKey(key, delta){
-  const d=dateFromKey(key); d.setDate(d.getDate()+delta); return localDateKey(d);
-}
-function activityEntry(key=localDateKey()){
-  if(!activity[key]) activity[key]={answered:0,correct:0,wrong:0,newIds:[]};
-  if(!Array.isArray(activity[key].newIds)) activity[key].newIds=[];
-  return activity[key];
-}
-function recordActivity(correct, newId=null){
-  const a=activityEntry();
-  a.answered=(a.answered||0)+1;
-  if(correct===true) a.correct=(a.correct||0)+1;
-  if(correct===false) a.wrong=(a.wrong||0)+1;
-  if(newId && !a.newIds.includes(newId)) a.newIds.push(newId);
-}
-function todayNewCount(){ return activity[localDateKey()]?.newIds?.length || 0; }
 function streakCount(){
   const today=localDateKey();
-  let cursor=(activity[today]?.answered||0)>0 ? today : shiftDateKey(today,-1);
-  let n=0;
+  let cursor=(activity[today]?.answered||0)>0?today:shiftDateKey(today,-1), n=0;
   while((activity[cursor]?.answered||0)>0){ n++; cursor=shiftDateKey(cursor,-1); }
   return n;
 }
 
-// Meaning parser: keeps the source's numbered senses and the nearest part-of-speech tag.
 function parseSenses(raw){
   const parts=String(raw).split(/(\[[^\]]+\]|[①②③④⑤⑥⑦⑧⑨⑩⑪⑫⑬⑭⑮⑯⑰⑱⑲⑳])/g).filter(Boolean);
-  let pos="", current=null, plain="";
-  const out=[];
+  let pos="",current=null,plain=""; const out=[];
   for(const part of parts){
-    if(/^\[[^\]]+\]$/.test(part)){
-      pos=part;
-      continue;
-    }
-    if(CIRCLED.includes(part) && part.length===1){
-      if(current && current.text.trim()) out.push(current);
-      current={no:part,pos,text:""};
-      continue;
-    }
-    if(current) current.text+=part;
-    else plain+=part;
+    if(/^\[[^\]]+\]$/.test(part)){ pos=part; continue; }
+    if(CIRCLED.includes(part)&&part.length===1){ if(current&&current.text.trim())out.push(current); current={no:part,pos,text:""}; continue; }
+    if(current) current.text+=part; else plain+=part;
   }
-  if(current && current.text.trim()) out.push(current);
+  if(current&&current.text.trim()) out.push(current);
   if(!out.length){
-    const stripped=plain.trim() || String(raw).replace(/^\[[^\]]+\]\s*/,"").trim();
+    const stripped=plain.trim()||String(raw).replace(/^\[[^\]]+\]\s*/,"").trim();
     return [{key:"1",no:"",pos,text:stripped||String(raw)}];
   }
   return out.map((s,i)=>({key:s.no||String(i+1),no:s.no,pos:s.pos,text:s.text.trim()}));
 }
-function getSenses(w){
-  if(!senseCache.has(w.id)) senseCache.set(w.id,parseSenses(w.meaning));
-  return senseCache.get(w.id);
-}
-function formatSense(s){ return `${s.pos ? s.pos+" " : ""}${s.text}`.trim(); }
-function isPolysemous(w){ return getSenses(w).length>1; }
-
-function setupPresets(){
-  const sel=$("#rangePreset");
-  const opts=[];
-  for(let s=1;s<=WORDS.length;s+=100){
-    const e=Math.min(s+99,WORDS.length);
-    opts.push(`<option value="${s}-${e}">${s}–${e}</option>`);
-  }
-  opts.push(`<option value="1-${WORDS.length}">全範囲 1–${WORDS.length}</option>`);
-  sel.innerHTML=opts.join("");
-  const current=[...sel.options].find(o=>o.value===`${settings.start}-${settings.end}`);
-  if(current) sel.value=current.value;
-}
-function applySettingsToUI(){
-  $("#rangeStart").value=settings.start;
-  $("#rangeEnd").value=settings.end;
-  $("#sessionSize").value=String(settings.size);
-  $("#shuffleToggle").checked=!!settings.shuffle;
-  $("#targetDate").value=settings.targetDate||"";
-  $("#dailyQuota").value=String(settings.dailyQuota||30);
-  $$("#deckFilter button").forEach(b=>b.classList.toggle("active",b.dataset.filter===settings.filter));
-  $$(".quiz-mode button").forEach(b=>b.classList.toggle("active",b.dataset.mode===settings.quizMode));
-  applyTheme();
-}
-function readRange(){
-  const a=clamp(parseInt($("#rangeStart").value)||1,1,WORDS.length);
-  const b=clamp(parseInt($("#rangeEnd").value)||WORDS.length,1,WORDS.length);
-  settings.start=Math.min(a,b); settings.end=Math.max(a,b);
-  settings.size=parseInt($("#sessionSize").value)||20;
-  settings.shuffle=$("#shuffleToggle").checked;
-  $("#rangeStart").value=settings.start; $("#rangeEnd").value=settings.end;
-  save();
-}
-function eligibleWords(){
-  const t=now();
-  return WORDS.filter(w=>{
-    if(w.id<settings.start||w.id>settings.end) return false;
-    const s=progress[w.id];
-    if(settings.filter==="all") return true;
-    if(settings.filter==="new") return !s || !s.seen;
-    if(settings.filter==="due") return !!s && s.seen>0 && (s.due||0)<=t;
-    if(settings.filter==="weak") return !!s && (s.status==="weak" || (s.wrong||0)>(s.correct||0));
-    if(settings.filter==="starred") return !!s && s.starred;
-    return true;
-  });
-}
-function makeDeck(limit=settings.size){
-  let a=eligibleWords();
-  if(settings.shuffle) a=shuffle(a);
-  return a.slice(0,limit);
-}
-function makeQuizDeck(){
-  let base=eligibleWords();
-  if(settings.quizMode==="multi" || settings.quizMode==="sense") base=base.filter(isPolysemous);
-  if(settings.quizMode==="sense"){
-    let items=[];
-    for(const w of base){
-      getSenses(w).forEach((sense,index)=>items.push({w,sense,senseIndex:index,retry:0}));
-    }
-    if(settings.shuffle) items=shuffle(items);
-    return items.slice(0,settings.size);
-  }
-  if(settings.shuffle) base=shuffle(base);
-  return base.slice(0,settings.size).map(w=>({w,retry:0}));
-}
-function go(view){
-  $$(".view").forEach(v=>v.classList.remove("active"));
-  $(`#${view}View`).classList.add("active");
-  $$(".bottom-nav button").forEach(b=>b.classList.toggle("active",b.dataset.view===view));
-  window.scrollTo({top:0,behavior:"instant"});
-  if(view==="search"){ $("#searchInput").focus(); renderSearch(); }
-  if(view==="stats") renderStats();
-  if(view==="home") refreshHome();
-}
-
-function planningData(){
-  const unseen=WORDS.filter(w=>!progress[w.id]?.seen).length;
-  let days=null, needed=null;
-  if(settings.targetDate){
-    const target=dateFromKey(settings.targetDate), today=dateFromKey(localDateKey());
-    const diff=Math.floor((target-today)/DAY);
-    days=diff>=0?diff+1:0;
-    needed=days>0?Math.ceil(unseen/days):null;
-  }
-  return {unseen,days,needed};
-}
-function tripleData(){
-  let hits=0,cleared=0;
+function getSenses(w){ if(!senseCache.has(w.id))senseCache.set(w.id,parseSenses(w.meaning)); return senseCache.get(w.id); }
+function unitId(w,sense){ return `${w.id}:${sense.key}`; }
+function buildUnits(){
+  UNITS=[];
   for(const w of WORDS){
-    const h=Math.min(3,progress[w.id]?.tripleHits||0);
-    hits+=h; if(h>=3) cleared++;
+    const senses=getSenses(w);
+    senses.forEach((sense,index)=>UNITS.push({id:unitId(w,sense),w,sense,index,count:senses.length}));
   }
-  const total=WORDS.length*3;
-  return {hits,cleared,total,remaining:total-hits,pct:Math.round(cleared/WORDS.length*100)};
+}
+function ensureSenseRecord(unit){
+  const s=state(unit.w.id);
+  if(!s.senses[unit.sense.key]) s.senses[unit.sense.key]={correct:0,wrong:0};
+  if(s.senseHits[unit.sense.key]==null){
+    // v2 migration: single-sense 3x records are unambiguous; multi-sense records use prior meaning-specific correct counts only.
+    if(unit.count===1) s.senseHits[unit.sense.key]=Math.min(3,s.tripleHits||0);
+    else s.senseHits[unit.sense.key]=Math.min(3,s.senses[unit.sense.key]?.correct||0);
+  }
+  return s.senses[unit.sense.key];
+}
+function getHits(unit){ ensureSenseRecord(unit); return clamp(Number(state(unit.w.id).senseHits[unit.sense.key])||0,0,3); }
+function setHits(unit,n){ ensureSenseRecord(unit); state(unit.w.id).senseHits[unit.sense.key]=clamp(n,0,3); }
+function unitWrong(unit){ return ensureSenseRecord(unit).wrong||0; }
+function unitCorrect(unit){ return ensureSenseRecord(unit).correct||0; }
+function isUnitClear(unit){ return getHits(unit)>=3; }
+function isWordClear(w){ return getSenses(w).every(s=>getHits({w,sense:s,count:getSenses(w).length})>=3); }
+
+function missionData(){
+  let hits=0,clearedUnits=0; const dist=[0,0,0,0];
+  for(const u of UNITS){ const h=getHits(u); hits+=h; dist[h]++; if(h>=3)clearedUnits++; }
+  let clearedWords=0; for(const w of WORDS) if(isWordClear(w)) clearedWords++;
+  const total=UNITS.length*3, remaining=Math.max(0,total-hits), pct=total?Math.round(hits/total*100):0;
+  return {hits,clearedUnits,clearedWords,total,remaining,pct,dist};
+}
+function planningData(){
+  const m=missionData(); let days=null,needed=null;
+  if(settings.targetDate){
+    const target=dateFromKey(settings.targetDate),today=dateFromKey(localDateKey());
+    const diff=Math.floor((target-today)/DAY); days=diff>=0?diff+1:0; needed=days>0?Math.ceil(m.remaining/days):null;
+  }
+  return {...m,days,needed};
+}
+function todayStats(){
+  const a=activityEntry(); return {hits:a.missionHits||0,answered:a.answered||0,correct:a.correct||0,wrong:a.wrong||0};
 }
 function refreshHome(){
-  const entries=Object.values(progress).filter(v=>v&&typeof v==="object");
-  const mastered=entries.filter(s=>s.status==="mastered").length;
-  const weak=entries.filter(s=>s.status==="weak").length;
-  const starred=entries.filter(s=>s.starred).length;
-  const due=entries.filter(s=>s.seen>0 && (s.due||0)<=now() && s.status!=="mastered").length;
-  const pct=Math.round(mastered/WORDS.length*100);
-  $("#masteredCount").textContent=mastered; $("#totalCount").textContent=WORDS.length;
-  $("#weakCount").textContent=weak; $("#starCount").textContent=starred; $("#dueCount").textContent=due;
-  $("#streakCount").textContent=streakCount();
-  $("#progressPct").textContent=pct; $("#ringPct").textContent=pct+"%";
-  $("#progressRing").style.setProperty("--p",(pct*3.6)+"deg");
-
-  const plan=planningData(), quota=clamp(parseInt(settings.dailyQuota)||30,1,500), todayNew=todayNewCount();
-  $("#unseenCount").textContent=plan.unseen;
-  $("#daysLeft").textContent=plan.days==null?"—":plan.days;
-  $("#neededPerDay").textContent=plan.needed==null?"—":plan.needed;
-  $("#todayNewCount").textContent=todayNew; $("#todayQuotaText").textContent=quota;
-  $("#dailyGoalBar").style.width=Math.min(100,todayNew/quota*100)+"%";
-  const pace=$("#paceStatus");
-  if(!settings.targetDate){ pace.textContent="未設定"; pace.className="status-pill"; $("#planHint").textContent="目標日を設定すると、残り語数から1日あたりの必要数を計算します。"; }
-  else if(plan.days===0){ pace.textContent="期限超過"; pace.className="status-pill bad"; $("#planHint").textContent="目標日を過ぎています。新しい目標日を設定してください。"; }
-  else if(plan.unseen===0){ pace.textContent="新規完了"; pace.className="status-pill good"; $("#planHint").textContent="全単語に一度触れています。以後は復習と3回クリアで定着を上げられます。"; }
-  else if(quota>=plan.needed){ pace.textContent="ペースOK"; pace.className="status-pill good"; $("#planHint").textContent=`今のノルマなら目標ペース以上です。推奨は1日 ${plan.needed} 語です。`; }
-  else { pace.textContent=`+${plan.needed-quota}/日`; pace.className="status-pill warn"; $("#planHint").textContent=`目標日に間に合わせるには、現在より1日 ${plan.needed-quota} 語増やす計算です。`; }
-
-  const tri=tripleData();
-  $("#triplePct").textContent=tri.pct+"%";
-  $("#tripleBar").style.width=tri.pct+"%";
-  $("#tripleCleared").textContent=tri.cleared;
-  $("#tripleRemainingHits").textContent=tri.remaining;
+  const m=missionData(), plan=planningData(), t=todayStats(), quota=settings.dailyQuota;
+  $("#overallPct").textContent=m.pct; $("#earnedHits").textContent=m.hits.toLocaleString(); $("#totalHits").textContent=m.total.toLocaleString();
+  $("#remainingHits").textContent=m.remaining.toLocaleString(); $("#clearedUnits").textContent=m.clearedUnits.toLocaleString(); $("#clearedWords").textContent=m.clearedWords.toLocaleString();
+  $("#streakCount").textContent=streakCount(); $("#ringPct").textContent=m.pct+"%"; $("#progressRing").style.setProperty("--p",(m.pct*3.6)+"deg");
+  $("#targetDate").value=settings.targetDate||""; $("#dailyQuota").value=quota;
+  $("#daysLeft").textContent=plan.days==null?"—":plan.days; $("#planRemaining").textContent=m.remaining.toLocaleString(); $("#neededPerDay").textContent=plan.needed==null?"—":plan.needed.toLocaleString();
+  $("#todayHits").textContent=t.hits.toLocaleString(); $("#todayQuotaText").textContent=quota.toLocaleString(); $("#dailyGoalBar").style.width=Math.min(100,t.hits/quota*100)+"%";
+  const pace=$("#paceStatus"), hint=$("#planHint");
+  if(m.remaining===0){ pace.textContent="全クリ"; pace.className="status-pill good"; hint.textContent="全3553語義を3回ずつ正解しました。"; }
+  else if(!settings.targetDate){ pace.textContent="目標日未設定"; pace.className="status-pill"; hint.textContent=`現在の残りは ${m.remaining.toLocaleString()} 正解。目標日を決めると必要な1日ノルマを自動計算します。`; }
+  else if(plan.days===0){ pace.textContent="目標日経過"; pace.className="status-pill bad"; hint.textContent="新しい目標日を設定してください。"; }
+  else if(quota>=plan.needed){ pace.textContent="ペースOK"; pace.className="status-pill good"; hint.textContent=`このペースなら目標日に間に合います。必要ペースは1日 ${plan.needed.toLocaleString()} 正解です。`; }
+  else { pace.textContent=`+${(plan.needed-quota).toLocaleString()}/日`; pace.className="status-pill warn"; hint.textContent=`目標日に間に合わせるには、あと1日 ${(plan.needed-quota).toLocaleString()} 正解増やす必要があります。`; }
+  $("#startMissionBtn").textContent = m.remaining===0 ? "全クリ済み" : (t.hits>=quota ? "今日のノルマ達成済み · 続ける" : "今日のノルマを始める");
+  $("#startMissionBtn").disabled = m.remaining===0;
+}
+function savePlan(){
+  settings.targetDate=$("#targetDate").value||""; settings.dailyQuota=clamp(parseInt($("#dailyQuota").value)||100,1,2000); $("#dailyQuota").value=settings.dailyQuota; persist(); refreshHome();
+}
+function autoQuota(){
+  settings.targetDate=$("#targetDate").value||settings.targetDate||""; const p=planningData();
+  if(p.needed==null){ toast(settings.targetDate?"目標日が過ぎています":"先に目標日を設定してください"); return; }
+  settings.dailyQuota=clamp(Math.max(1,p.needed),1,2000); persist(); refreshHome(); toast(`1日 ${settings.dailyQuota.toLocaleString()} 正解に設定しました`);
 }
 
-function updateLearningState(s, correct){
+function go(view){
+  $$(".view").forEach(v=>v.classList.remove("active")); const el=$(`#${view}View`); if(el)el.classList.add("active");
+  $$(".bottom-nav button").forEach(b=>b.classList.toggle("active",b.dataset.view===view));
+  window.scrollTo({top:0,behavior:"instant"});
+  if(view==="home")refreshHome(); if(view==="search")renderSearch(); if(view==="stats")renderStats();
+}
+
+function normalizeMeaning(s){
+  return String(s).toLowerCase().replace(/[（(][^）)]*[）)]/g,"").replace(/[〈〉［］\[\]～〜・，、。,.\/＝=\s]/g,"").replace(/[①-⑳]/g,"");
+}
+function meaningTokens(s){
+  const cleaned=String(s).replace(/[（(][^）)]*[）)]/g," ").replace(/[〈〉［］\[\]～〜・，、。,.\/＝=]/g," ");
+  return [...new Set(cleaned.match(/[一-龯ぁ-んァ-ヶー]{2,}|[a-zA-Z]{3,}/g)||[])];
+}
+function meaningsOverlap(a,b){
+  const na=normalizeMeaning(a),nb=normalizeMeaning(b); if(!na||!nb)return false; if(na===nb)return true;
+  if(Math.min(na.length,nb.length)>=4&&(na.includes(nb)||nb.includes(na)))return true;
+  const A=meaningTokens(a),B=meaningTokens(b); if(!A.length||!B.length)return false;
+  let shared=0; for(const x of A) if(B.includes(x))shared++;
+  return shared/Math.min(A.length,B.length)>=0.6;
+}
+function distractorsFor(unit){
+  const candidates=shuffle(UNITS.filter(u=>u.w.id!==unit.w.id && !meaningsOverlap(u.sense.text,unit.sense.text)));
+  const picked=[]; const used=[];
+  for(const c of candidates){
+    if(used.some(x=>meaningsOverlap(x,c.sense.text)))continue;
+    picked.push(c); used.push(c.sense.text); if(picked.length===3)break;
+  }
+  return picked;
+}
+function weightedRandom(pool){
+  let total=0; const weighted=pool.map(u=>{
+    const h=getHits(u), w=1 + Math.min(4,unitWrong(u)*0.55) + h*0.18; total+=w; return [u,total];
+  });
+  const r=Math.random()*total; return weighted.find(([,cum])=>r<cum)?.[0]||pool[0];
+}
+function queueRetry(unit){
+  if(retryQueue.some(x=>x.id===unit.id))return;
+  retryQueue.push({id:unit.id,due:questionNo+4+Math.floor(Math.random()*3)});
+}
+function chooseNextUnit(){
+  retryQueue=retryQueue.filter(x=>{ const u=UNITS.find(v=>v.id===x.id); return u&&!isUnitClear(u); });
+  const due=retryQueue.filter(x=>x.due<=questionNo);
+  if(due.length){
+    const item=due[0]; retryQueue=retryQueue.filter(x=>x!==item); return UNITS.find(u=>u.id===item.id);
+  }
+  let pool=UNITS.filter(u=>!isUnitClear(u)&&!recentUnits.includes(u.id)&&!recentWords.includes(u.w.id));
+  if(pool.length<8) pool=UNITS.filter(u=>!isUnitClear(u)&&!recentUnits.includes(u.id));
+  if(!pool.length) pool=UNITS.filter(u=>!isUnitClear(u));
+  return pool.length?weightedRandom(pool):null;
+}
+function startMission(forceContinue=false){
+  const m=missionData(); if(!m.remaining){toast("全語義クリア済みです");return;}
+  quotaExtended=forceContinue || todayStats().hits>=settings.dailyQuota;
+  currentUnit=null; missionAnswered=false; combo=0; retryQueue=[]; recentUnits=[]; recentWords=[]; questionNo=0;
+  go("mission"); nextMission();
+}
+function nextMission(){
+  const t=todayStats();
+  if(!quotaExtended && t.hits>=settings.dailyQuota){ showComplete(); return; }
+  currentUnit=chooseNextUnit(); missionAnswered=false;
+  if(!currentUnit){ showComplete(true); return; }
+  questionNo++;
+  recentUnits.push(currentUnit.id); if(recentUnits.length>10)recentUnits.shift();
+  recentWords.push(currentUnit.w.id); if(recentWords.length>5)recentWords.shift();
+  renderMission();
+}
+function renderMission(){
+  const u=currentUnit,m=missionData(),t=todayStats(),quota=settings.dailyQuota,h=getHits(u);
+  $("#missionTodayHits").textContent=t.hits.toLocaleString(); $("#missionQuota").textContent=quota.toLocaleString(); $("#missionBar").style.width=Math.min(100,t.hits/quota*100)+"%";
+  $("#missionRemaining").textContent=m.remaining.toLocaleString(); $("#missionWordNo").textContent=`No. ${u.w.id}`; $("#senseHit").textContent=`${h} / 3`;
+  $("#missionPrompt").textContent=u.w.word; $("#missionStarBtn").textContent=state(u.w.id).starred?"★":"☆";
+  const label=$("#senseLabel");
+  if(u.count>1){ label.classList.remove("hidden"); label.textContent=`${u.sense.no||`意味${u.index+1}`} ${u.sense.pos||""}`.trim(); }
+  else label.classList.add("hidden");
+  $("#missionFeedback").className="feedback hidden"; $("#nextMissionBtn").classList.add("hidden"); $("#missionChoices").innerHTML="";
+  const choices=shuffle([u,...distractorsFor(u)]);
+  choices.forEach(c=>{
+    const b=document.createElement("button"); b.className="choice"; b.textContent=c.sense.text; b.dataset.unit=c.id;
+    b.onclick=()=>answerMission(b,c.id===u.id); $("#missionChoices").appendChild(b);
+  });
+  updateLiveStats();
+}
+function recordMission(correct){
+  const u=currentUnit,s=state(u.w.id),sr=ensureSenseRecord(u),a=activityEntry();
+  s.seen=(s.seen||0)+1; a.answered=(a.answered||0)+1;
+  let gained=0;
   if(correct){
-    s.correct=(s.correct||0)+1; s.level=Math.min(6,(s.level||0)+1);
-    const intervals=[1,3,7,14,30,60,120];
-    s.due=now()+intervals[s.level]*DAY; s.status=s.level>=4?"mastered":"learning";
+    s.correct=(s.correct||0)+1; sr.correct=(sr.correct||0)+1; a.correct=(a.correct||0)+1;
+    const before=getHits(u); if(before<3){ setHits(u,before+1); a.missionHits=(a.missionHits||0)+1; gained=1; }
+    s.status=isWordClear(u.w)?"mastered":"learning";
   }else{
-    s.wrong=(s.wrong||0)+1; s.level=Math.max(0,(s.level||0)-1); s.due=now()+10*60*1000; s.status="weak";
+    s.wrong=(s.wrong||0)+1; sr.wrong=(sr.wrong||0)+1; a.wrong=(a.wrong||0)+1; s.status="weak"; queueRetry(u);
   }
+  persist(); return gained;
 }
-function rateWord(id, rating){
-  const s=state(id), wasNew=!s.seen; s.seen=(s.seen||0)+1; s.last=now();
-  if(rating==="again"){
-    s.wrong=(s.wrong||0)+1; s.level=Math.max(0,(s.level||0)-1); s.status="weak"; s.due=now()+10*60*1000;
-    recordActivity(false,wasNew?id:null);
-  } else if(rating==="hard"){
-    s.correct=(s.correct||0)+1; s.level=Math.max(1,s.level||0); s.status="learning"; s.due=now()+DAY;
-    recordActivity(true,wasNew?id:null);
-  } else {
-    s.correct=(s.correct||0)+1; s.level=Math.min(6,(s.level||0)+1);
-    const intervals=[1,3,7,14,30,60,120];
-    s.due=now()+intervals[s.level]*DAY;
-    s.status=s.level>=4?"mastered":"learning";
-    recordActivity(true,wasNew?id:null);
+function answerMission(btn,correct){
+  if(missionAnswered)return; missionAnswered=true;
+  const u=currentUnit;
+  [...$("#missionChoices").children].forEach(b=>{ b.disabled=true; if(b.dataset.unit===u.id)b.classList.add("correct"); });
+  if(!correct)btn.classList.add("wrong");
+  const gained=recordMission(correct),h=getHits(u); combo=correct?combo+1:0;
+  $("#senseHit").textContent=`${h} / 3`;
+  const f=$("#missionFeedback"); f.className="feedback "+(correct?"good-f":"bad-f");
+  if(correct){
+    const clearText=h>=3?" · この語義をクリア！":"";
+    f.innerHTML=`✓ 正解 <b>${h} / 3</b>${clearText}${u.count>1?`<div class="feedback-note">${escapeHTML(u.w.word)} ${escapeHTML(u.sense.no)}：${escapeHTML(u.sense.text)}</div>`:""}`;
+  }else{
+    f.innerHTML=`✕ 正解は <b>${escapeHTML(u.sense.text)}</b><div class="feedback-note">4〜6問ほど後にもう一度出ます。正解回数は減りません。</div>`;
   }
-  save();
+  $("#nextMissionBtn").classList.remove("hidden"); updateMissionHeader(); updateLiveStats();
+  const t=todayStats(); if(gained && t.hits>0 && t.hits%25===0)toast(`今日 ${t.hits.toLocaleString()} 正解！`);
 }
-function recordQuiz(id, correct){
-  const s=state(id), wasNew=!s.seen; s.seen=(s.seen||0)+1; s.last=now();
-  updateLearningState(s,correct); recordActivity(correct,wasNew?id:null); save();
+function updateMissionHeader(){
+  const t=todayStats(),m=missionData(),quota=settings.dailyQuota;
+  $("#missionTodayHits").textContent=t.hits.toLocaleString(); $("#missionQuota").textContent=quota.toLocaleString(); $("#missionBar").style.width=Math.min(100,t.hits/quota*100)+"%"; $("#missionRemaining").textContent=m.remaining.toLocaleString();
 }
-function recordSenseQuiz(item, correct){
-  const s=state(item.w.id), wasNew=!s.seen; s.seen=(s.seen||0)+1; s.last=now();
-  const key=item.sense.key||String(item.senseIndex+1);
-  if(!s.senses[key]) s.senses[key]={correct:0,wrong:0};
-  if(correct) s.senses[key].correct++; else s.senses[key].wrong++;
-  updateLearningState(s,correct); recordActivity(correct,wasNew?item.w.id:null); save();
+function updateLiveStats(){
+  const t=todayStats(); $("#comboCount").textContent=combo; $("#todayAnswered").textContent=t.answered.toLocaleString(); $("#todayAccuracy").textContent=t.answered?Math.round(t.correct/t.answered*100)+"%":"—";
 }
-function recordChallenge(w, correct){
-  const s=state(w.id), wasNew=!s.seen; s.seen=(s.seen||0)+1; s.last=now();
-  updateLearningState(s,correct);
-  if(correct) s.tripleHits=Math.min(3,(s.tripleHits||0)+1);
-  recordActivity(correct,wasNew?w.id:null); save();
-  return s.tripleHits||0;
+function showComplete(all=false){
+  const m=missionData(),t=todayStats();
+  $("#completeTodayHits").textContent=t.hits.toLocaleString(); $("#completeRemaining").textContent=m.remaining.toLocaleString(); $("#completeUnits").textContent=m.clearedUnits.toLocaleString(); $("#completeWords").textContent=m.clearedWords.toLocaleString();
+  $("#continueMissionBtn").classList.toggle("hidden",all||m.remaining===0); go("complete");
 }
-function toggleStar(id){
-  const s=state(id); s.starred=!s.starred; save(); return s.starred;
-}
+function toggleStar(id){ const s=state(id); s.starred=!s.starred; persist(); return s.starred; }
 
-// Study cards
-function startStudy(){
-  studySessionType="normal"; studyDeck=makeDeck(); studyPos=0;
-  if(!studyDeck.length){ toast("この条件に該当する単語がありません"); return; }
-  $("#studySessionBanner").classList.add("hidden");
-  go("study"); renderStudy();
-}
-function startToday(){
-  const quota=clamp(parseInt(settings.dailyQuota)||30,1,500);
-  const need=Math.max(0,quota-todayNewCount());
-  const due=shuffle(WORDS.filter(w=>{const s=progress[w.id];return s?.seen>0&&(s.due||0)<=now()&&s.status!=="mastered";}));
-  const unseen=shuffle(WORDS.filter(w=>!progress[w.id]?.seen));
-  const reviewCap=Math.max(10,Math.min(30,settings.size||20));
-  const review=due.slice(0,reviewCap), fresh=unseen.slice(0,need);
-  studyDeck=[...review,...fresh];
-  if(settings.shuffle) studyDeck=shuffle(studyDeck);
-  if(!studyDeck.length){ toast("今日の新規ノルマは達成済みです。復習対象もありません"); return; }
-  studySessionType="today"; studyPos=0;
-  const banner=$("#studySessionBanner"); banner.textContent=`今日のプラン：新規 ${fresh.length} 語 + 復習 ${review.length} 語`; banner.classList.remove("hidden");
-  go("study"); renderStudy();
-}
-function renderStudy(){
-  if(studyPos>=studyDeck.length){ toast(studySessionType==="today"?"今日のプラン完了！":"学習完了！"); go("home"); return; }
-  const w=studyDeck[studyPos], s=state(w.id); studyRevealed=false;
-  $("#studyIndex").textContent=studyPos+1; $("#studyTotal").textContent=studyDeck.length;
-  $("#studyBar").style.width=((studyPos)/studyDeck.length*100)+"%";
-  $("#studyWordNo").textContent=`No. ${w.id}`; $("#studyFront").textContent=w.word; $("#studyBack").textContent=cleanMeaning(w.meaning);
-  $("#studyBack").classList.add("hidden"); $("#tapHint").classList.remove("hidden"); $("#ratingButtons").classList.add("hidden");
-  $("#studyStarBtn").textContent=s.starred?"★":"☆";
-}
-function revealStudy(){
-  if(studyRevealed) return;
-  studyRevealed=true; $("#studyBack").classList.remove("hidden"); $("#tapHint").classList.add("hidden"); $("#ratingButtons").classList.remove("hidden");
-}
-function finishRating(r){
-  const w=studyDeck[studyPos]; rateWord(w.id,r); studyPos++; renderStudy();
-}
-
-// Standard quiz
-function startQuiz(){
-  quizDeck=makeQuizDeck(); quizPos=0;
-  if(!quizDeck.length){
-    toast((settings.quizMode==="multi"||settings.quizMode==="sense")?"この範囲に番号付きの多義語がありません":"この条件に該当する単語がありません");
-    return;
-  }
-  go("quiz"); renderQuiz();
-}
-function currentQuizItem(){ return quizDeck[quizPos]; }
-function renderQuiz(){
-  if(quizPos>=quizDeck.length){ toast("テスト完了！"); go("stats"); return; }
-  quizAnswered=false;
-  const item=currentQuizItem(), w=item.w, s=state(w.id), mode=settings.quizMode;
-  $("#quizIndex").textContent=quizPos+1; $("#quizTotal").textContent=quizDeck.length;
-  $("#quizBar").style.width=((quizPos)/quizDeck.length*100)+"%";
-  $("#quizWordNo").textContent=`No. ${w.id}`;
-  $("#quizStarBtn").textContent=s.starred?"★":"☆";
-  $("#quizFeedback").className="feedback hidden"; $("#nextQuizBtn").classList.add("hidden"); $("#multiSubmitBtn").classList.add("hidden");
-  $("#quizKicker").classList.add("hidden"); $("#choiceArea").innerHTML=""; $("#spellInput").value="";
-  $("#quizSpeakBtn").classList.toggle("hidden",mode==="ja-en"||mode==="spell");
-  $("#choiceArea").classList.toggle("hidden",mode==="spell");
-  $("#spellArea").classList.toggle("hidden",mode!=="spell");
-
-  if(mode==="en-ja"){
-    $("#quizPrompt").textContent=w.word; renderChoices(w,true);
-  }else if(mode==="ja-en"){
-    $("#quizPrompt").textContent=w.meaning; renderChoices(w,false);
-  }else if(mode==="spell"){
-    $("#quizPrompt").textContent=w.meaning; setTimeout(()=>$("#spellInput").focus(),50);
-  }else if(mode==="multi"){
-    $("#quizKicker").textContent="当てはまる意味をすべて選択"; $("#quizKicker").classList.remove("hidden");
-    $("#quizPrompt").textContent=w.word; renderMultiChoices(w); $("#multiSubmitBtn").classList.remove("hidden");
-  }else if(mode==="sense"){
-    $("#quizKicker").textContent=`${item.sense.pos||"語義"} · 意味${item.sense.no||item.senseIndex+1}`; $("#quizKicker").classList.remove("hidden");
-    $("#quizPrompt").textContent=w.word; renderSenseChoices(item);
-  }
-}
-function distractors(target){
-  let pool=WORDS.filter(w=>w.id>=settings.start&&w.id<=settings.end&&w.id!==target.id);
-  if(pool.length<3) pool=WORDS.filter(w=>w.id!==target.id);
-  return shuffle(pool).slice(0,3);
-}
-function renderChoices(w, answerIsMeaning){
-  const choices=shuffle([w,...distractors(w)]);
-  choices.forEach(x=>{
-    const b=document.createElement("button"); b.className="choice";
-    b.textContent=answerIsMeaning?x.meaning:x.word;
-    b.dataset.id=x.id;
-    b.addEventListener("click",()=>answerChoice(b,Number(b.dataset.id)===w.id,w));
-    $("#choiceArea").appendChild(b);
-  });
-}
-function answerChoice(btn, correct, w){
-  if(quizAnswered) return; quizAnswered=true;
-  [...$("#choiceArea").children].forEach(b=>{ if(Number(b.dataset.id)===w.id) b.classList.add("correct"); });
-  if(!correct) btn.classList.add("wrong");
-  showFeedback(correct,w); recordQuiz(w.id,correct);
-  if(!correct) scheduleRetry(currentQuizItem());
-}
-function submitSpell(){
-  if(quizAnswered) return;
-  const item=currentQuizItem(), w=item.w, ans=$("#spellInput").value.trim().toLowerCase().replace(/\s+/g," ");
-  if(!ans) return;
-  const correct=ans===w.word.toLowerCase().replace(/\s+/g," ");
-  quizAnswered=true; showFeedback(correct,w); recordQuiz(w.id,correct);
-  if(!correct) scheduleRetry(item);
-}
-function renderMultiChoices(w){
-  const correct=getSenses(w).map(s=>({text:formatSense(s),correct:true}));
-  const needed=Math.max(2,Math.min(4,8-correct.length));
-  const others=shuffle(WORDS.filter(x=>x.id!==w.id));
-  const wrong=[];
-  for(const ow of others){
-    for(const s of getSenses(ow)){
-      const text=formatSense(s);
-      if(!correct.some(x=>x.text===text)&&!wrong.some(x=>x.text===text)) wrong.push({text,correct:false});
-      if(wrong.length>=needed) break;
-    }
-    if(wrong.length>=needed) break;
-  }
-  shuffle([...correct,...wrong]).forEach((opt,i)=>{
-    const b=document.createElement("button"); b.className="choice multi-choice"; b.textContent=opt.text; b.dataset.correct=opt.correct?"1":"0"; b.dataset.opt=i;
-    b.onclick=()=>{ if(!quizAnswered) b.classList.toggle("selected"); };
-    $("#choiceArea").appendChild(b);
-  });
-}
-function answerMulti(){
-  if(quizAnswered) return;
-  const buttons=[...$("#choiceArea").children];
-  const correct=buttons.every(b=>(b.dataset.correct==="1")===b.classList.contains("selected"));
-  quizAnswered=true;
-  buttons.forEach(b=>{
-    if(b.dataset.correct==="1") b.classList.add("correct");
-    else if(b.classList.contains("selected")) b.classList.add("wrong");
-    b.disabled=true;
-  });
-  $("#multiSubmitBtn").classList.add("hidden");
-  const item=currentQuizItem(); showFeedback(correct,item.w,"意味をすべて選ぶ問題"); recordQuiz(item.w.id,correct);
-  if(!correct) scheduleRetry(item);
-}
-function renderSenseChoices(item){
-  const options=[{text:item.sense.text,correct:true}];
-  // Other meanings of the same word are strong distractors and make the numbered sense meaningful.
-  for(const s of getSenses(item.w)){
-    if(s.key!==item.sense.key && !options.some(o=>o.text===s.text)) options.push({text:s.text,correct:false});
-    if(options.length>=4) break;
-  }
-  if(options.length<4){
-    const all=shuffle(WORDS.filter(w=>w.id!==item.w.id));
-    outer: for(const w of all){
-      for(const s of getSenses(w)){
-        if(!options.some(o=>o.text===s.text)) options.push({text:s.text,correct:false});
-        if(options.length>=4) break outer;
-      }
-    }
-  }
-  shuffle(options.slice(0,4)).forEach(opt=>{
-    const b=document.createElement("button"); b.className="choice"; b.textContent=opt.text; b.dataset.correct=opt.correct?"1":"0";
-    b.onclick=()=>answerSenseChoice(b,opt.correct,item);
-    $("#choiceArea").appendChild(b);
-  });
-}
-function answerSenseChoice(btn, correct, item){
-  if(quizAnswered) return; quizAnswered=true;
-  [...$("#choiceArea").children].forEach(b=>{ if(b.dataset.correct==="1") b.classList.add("correct"); });
-  if(!correct) btn.classList.add("wrong");
-  const label=`${item.sense.pos||""} 意味${item.sense.no||item.senseIndex+1}`.trim();
-  showFeedback(correct,item.w,label,item.sense.text); recordSenseQuiz(item,correct);
-  if(!correct) scheduleRetry(item);
-}
-function showFeedback(correct,w,label="",answerText=""){
-  const f=$("#quizFeedback"); f.className="feedback "+(correct?"good-f":"bad-f");
-  const detail=answerText||w.meaning;
-  f.innerHTML=correct
-    ? `✓ 正解${label?` <span class="feedback-note">${escapeHTML(label)}</span>`:""}<br><b>${escapeHTML(w.word)}</b>`
-    : `✕ ${label?escapeHTML(label)+" の正解":"正解"}は<br><b>${escapeHTML(detail)}</b>`;
-  $("#nextQuizBtn").classList.remove("hidden");
-}
-function scheduleRetry(item){
-  if((item.retry||0)>=2) return;
-  const retry=Object.assign({},item,{retry:(item.retry||0)+1});
-  const at=Math.min(quizDeck.length,quizPos+4);
-  quizDeck.splice(at,0,retry);
-  $("#quizTotal").textContent=quizDeck.length;
-}
-function nextQuiz(){ quizPos++; renderQuiz(); }
-
-// 3x random challenge
-function startTripleChallenge(){
-  const tri=tripleData();
-  if(tri.cleared>=WORDS.length){ toast("全1935語が3回クリア済みです！"); return; }
-  challengeSessionCleared=new Set(); challengeRecent=[]; challengeCurrent=null; challengeAnswered=false;
-  go("challenge"); nextChallenge();
-}
-function chooseChallengeWord(){
-  let pool=WORDS.filter(w=>(progress[w.id]?.tripleHits||0)<3 && !challengeRecent.includes(w.id));
-  if(!pool.length) pool=WORDS.filter(w=>(progress[w.id]?.tripleHits||0)<3);
-  return pool.length?sample(pool):null;
-}
-function nextChallenge(){
-  challengeCurrent=chooseChallengeWord(); challengeAnswered=false;
-  if(!challengeCurrent){ toast("3回クリア完了！"); go("stats"); return; }
-  challengeRecent.push(challengeCurrent.id); if(challengeRecent.length>8) challengeRecent.shift();
-  renderChallenge();
-}
-function renderChallenge(){
-  const w=challengeCurrent, s=state(w.id), tri=tripleData();
-  $("#challengeClearedNow").textContent=challengeSessionCleared.size;
-  $("#challengeBar").style.width=(tri.cleared/WORDS.length*100)+"%";
-  $("#challengeWordNo").textContent=`No. ${w.id}`; $("#challengePrompt").textContent=w.word;
-  $("#challengeHit").textContent=`${Math.min(3,s.tripleHits||0)} / 3`;
-  $("#challengeStarBtn").textContent=s.starred?"★":"☆";
-  $("#challengeFeedback").className="feedback hidden"; $("#nextChallengeBtn").classList.add("hidden"); $("#challengeChoices").innerHTML="";
-  const choices=shuffle([w,...challengeDistractors(w)]);
-  choices.forEach(x=>{
-    const b=document.createElement("button"); b.className="choice"; b.textContent=x.meaning; b.dataset.id=x.id;
-    b.onclick=()=>answerChallengeChoice(b,Number(b.dataset.id)===w.id,w);
-    $("#challengeChoices").appendChild(b);
-  });
-}
-function challengeDistractors(target){
-  return shuffle(WORDS.filter(w=>w.id!==target.id)).slice(0,3);
-}
-function answerChallengeChoice(btn,correct,w){
-  if(challengeAnswered) return; challengeAnswered=true;
-  [...$("#challengeChoices").children].forEach(b=>{if(Number(b.dataset.id)===w.id)b.classList.add("correct")});
-  if(!correct) btn.classList.add("wrong");
-  const before=progress[w.id]?.tripleHits||0, hits=recordChallenge(w,correct);
-  if(correct && hits>=3 && before<3) challengeSessionCleared.add(w.id);
-  $("#challengeHit").textContent=`${hits} / 3`;
-  const f=$("#challengeFeedback"); f.className="feedback "+(correct?"good-f":"bad-f");
-  if(correct) f.innerHTML=hits>=3?`✓ 正解 · <b>3 / 3 クリア！</b>`:`✓ 正解 · <b>${hits} / 3</b>`;
-  else f.innerHTML=`✕ 正解は<br><b>${escapeHTML(w.meaning)}</b><br><span class="feedback-note">正解回数は減りません</span>`;
-  $("#nextChallengeBtn").classList.remove("hidden");
-  const tri=tripleData(); $("#challengeBar").style.width=(tri.cleared/WORDS.length*100)+"%"; $("#challengeClearedNow").textContent=challengeSessionCleared.size;
-}
-
-// Search & stats
 function renderSearch(){
   const q=$("#searchInput").value.trim().toLowerCase();
-  const list=(q?WORDS.filter(w=>w.word.toLowerCase().includes(q)||w.meaning.toLowerCase().includes(q)):WORDS.slice(0,60)).slice(0,120);
+  const list=(q?WORDS.filter(w=>w.word.toLowerCase().includes(q)||w.meaning.toLowerCase().includes(q)):WORDS.slice(0,80)).slice(0,160);
   $("#searchResults").innerHTML=list.map(w=>{
-    const s=progress[w.id]||{}, h=Math.min(3,s.tripleHits||0), poly=isPolysemous(w)?` · ${getSenses(w).length}義`:"";
-    return `<div class="word-item"><div><div class="meta">No. ${w.id}${s.status?` · ${statusJP(s.status)}`:""} · 3× ${h}/3${poly}</div><h4>${escapeHTML(w.word)}</h4><p>${escapeHTML(w.meaning)}</p></div><button class="mini-star" data-star="${w.id}">${s.starred?"★":"☆"}</button></div>`;
+    const senses=getSenses(w), rows=senses.map(s=>{ const u={w,sense:s,count:senses.length}; return `<div class="sense-row"><span>${escapeHTML(s.no||"")}${s.pos?` ${escapeHTML(s.pos)}`:""}</span><em>${escapeHTML(s.text)}</em><b>${getHits(u)}/3</b></div>`; }).join("");
+    return `<div class="word-item"><div><div class="meta">No. ${w.id} · ${senses.length}語義</div><h4>${escapeHTML(w.word)}</h4>${rows}</div><button class="mini-star" data-star="${w.id}">${state(w.id).starred?"★":"☆"}</button></div>`;
   }).join("");
-  $$('[data-star]').forEach(b=>b.onclick=()=>{const on=toggleStar(Number(b.dataset.star));b.textContent=on?"★":"☆";});
+  $$('[data-star]').forEach(b=>b.onclick=()=>{ const on=toggleStar(Number(b.dataset.star)); b.textContent=on?"★":"☆"; });
 }
 function renderWeekStrip(){
-  const today=localDateKey(), labels=["日","月","火","水","木","金","土"], cells=[];
-  for(let i=6;i>=0;i--){
-    const key=shiftDateKey(today,-i), d=dateFromKey(key), a=activity[key]||{}, count=a.answered||0;
-    cells.push(`<div class="week-day ${count?"active":""}"><span>${labels[d.getDay()]}</span><b>${d.getDate()}</b><small>${count||"—"}</small></div>`);
-  }
+  const today=localDateKey(),labels=["日","月","火","水","木","金","土"],cells=[];
+  for(let i=6;i>=0;i--){ const key=shiftDateKey(today,-i),d=dateFromKey(key),a=activity[key]||{},count=a.missionHits||0; cells.push(`<div class="week-day ${count?"active":""}"><span>${labels[d.getDay()]}</span><b>${d.getDate()}</b><small>${count||"—"}</small></div>`); }
   $("#weekStrip").innerHTML=cells.join("");
 }
 function renderStats(){
-  const entries=Object.values(progress).filter(v=>v&&typeof v==="object");
-  const correct=entries.reduce((a,s)=>a+(s.correct||0),0), wrong=entries.reduce((a,s)=>a+(s.wrong||0),0);
-  $("#statsSeen").textContent=entries.filter(s=>s.seen>0).length;
-  $("#statsCorrect").textContent=correct; $("#statsWrong").textContent=wrong;
-  $("#statsStreak").textContent=streakCount(); $("#statsToday").textContent=activity[localDateKey()]?.answered||0;
-  $("#statsAccuracy").textContent=(correct+wrong)?Math.round(correct/(correct+wrong)*100)+"%":"—";
+  const m=missionData(),entries=Object.values(progress).filter(v=>v&&typeof v==="object");
+  const correct=entries.reduce((a,s)=>a+(s.correct||0),0),wrong=entries.reduce((a,s)=>a+(s.wrong||0),0),t=todayStats();
+  $("#statsHits").textContent=m.hits.toLocaleString(); $("#statsClearedUnits").textContent=m.clearedUnits.toLocaleString(); $("#statsClearedWords").textContent=m.clearedWords.toLocaleString();
+  $("#statsStreak").textContent=streakCount(); $("#statsToday").textContent=t.hits.toLocaleString(); $("#statsAccuracy").textContent=(correct+wrong)?Math.round(correct/(correct+wrong)*100)+"%":"—";
+  $("#hitDistribution").innerHTML=m.dist.map((n,i)=>`<div><span>${i}/3</span><div class="mini-bar"><i style="width:${UNITS.length?Math.round(n/UNITS.length*100):0}%"></i></div><b>${n.toLocaleString()}</b></div>`).join("");
   renderWeekStrip();
-
-  let touched=0, perfect=0;
-  for(const w of WORDS.filter(isPolysemous)){
-    const senses=getSenses(w), rec=progress[w.id]?.senses||{};
-    touched+=senses.filter(s=>((rec[s.key]?.correct||0)+(rec[s.key]?.wrong||0))>0).length;
-    if(senses.every(s=>(rec[s.key]?.correct||0)>0)) perfect++;
-  }
-  $("#senseTouched").textContent=touched; $("#sensePerfectWords").textContent=perfect;
-
+  const hard=UNITS.filter(u=>unitWrong(u)>0&&!isUnitClear(u)).sort((a,b)=>unitWrong(b)-unitWrong(a)||getHits(a)-getHits(b)).slice(0,12);
+  $("#hardList").innerHTML=hard.length?hard.map(u=>`<div class="hard-item"><div><b>${escapeHTML(u.w.word)} ${escapeHTML(u.sense.no||"")}</b><span>${escapeHTML(u.sense.text)}</span></div><em>誤答 ${unitWrong(u)} · ${getHits(u)}/3</em></div>`).join(""):`<p class="tiny">まだ誤答記録はありません。</p>`;
   const chunks=[];
   for(let start=1;start<=WORDS.length;start+=100){
-    const end=Math.min(start+99,WORDS.length), total=end-start+1;
-    let mastered=0;
-    for(let i=start;i<=end;i++) if(progress[i]?.status==="mastered") mastered++;
-    const p=Math.round(mastered/total*100);
+    const end=Math.min(start+99,WORDS.length),ws=WORDS.filter(w=>w.id>=start&&w.id<=end),cleared=ws.filter(isWordClear).length,p=Math.round(cleared/ws.length*100);
     chunks.push(`<div class="chunk"><span>${start}–${end}</span><div class="mini-bar"><i style="width:${p}%"></i></div><b>${p}%</b></div>`);
   }
   $("#chunkStats").innerHTML=chunks.join("");
 }
 
-// Export/import
 function exportProgress(){
-  const payload={version:2,exportedAt:new Date().toISOString(),progress,settings,activity};
-  const blob=new Blob([JSON.stringify(payload,null,2)],{type:"application/json"});
-  const url=URL.createObjectURL(blob),a=document.createElement("a");a.href=url;a.download=`vocab1935-progress-${new Date().toISOString().slice(0,10)}.json`;a.click();setTimeout(()=>URL.revokeObjectURL(url),1000);
+  const payload={version:3,exportedAt:new Date().toISOString(),progress,settings,activity};
+  const blob=new Blob([JSON.stringify(payload,null,2)],{type:"application/json"}),url=URL.createObjectURL(blob),a=document.createElement("a");
+  a.href=url; a.download=`vocab1935-progress-${new Date().toISOString().slice(0,10)}.json`; a.click(); setTimeout(()=>URL.revokeObjectURL(url),1000);
 }
 async function importProgress(file){
   try{
-    const j=JSON.parse(await file.text());
-    if(!j || typeof j.progress!=="object") throw new Error();
-    progress=j.progress; settings=Object.assign(settings,j.settings||{}); activity=(j.activity&&typeof j.activity==="object")?j.activity:{};
-    save(); applySettingsToUI(); toast("進捗を読み込みました");
+    const j=JSON.parse(await file.text()); if(!j||typeof j.progress!=="object")throw new Error();
+    progress=j.progress; settings=Object.assign(settings,j.settings||{}); settings.dailyQuota=clamp(parseInt(settings.dailyQuota)||100,1,2000); activity=(j.activity&&typeof j.activity==="object")?j.activity:{};
+    persist(); refreshHome(); toast("進捗を読み込みました");
   }catch{toast("読み込みに失敗しました")}
 }
 function resetProgress(){
-  if(confirm("すべての学習記録・3回クリア記録・連続学習記録をリセットしますか？")){
-    progress={}; activity={}; localStorage.removeItem(KEY); localStorage.removeItem(ACTIVITY_KEY); save(); toast("リセットしました");
-  }
+  if(confirm("すべての学習記録をリセットしますか？")){ progress={}; activity={}; localStorage.removeItem(KEY); localStorage.removeItem(ACTIVITY_KEY); persist(); refreshHome(); toast("リセットしました"); }
 }
-
-// Theme
 function applyTheme(){
-  const dark=settings.theme==="dark" || (settings.theme==="system"&&matchMedia("(prefers-color-scheme: dark)").matches);
-  document.documentElement.dataset.theme=dark?"dark":"light";
+  const dark=settings.theme==="dark"||(settings.theme==="system"&&matchMedia("(prefers-color-scheme: dark)").matches); document.documentElement.dataset.theme=dark?"dark":"light";
 }
-function cycleTheme(){
-  settings.theme=settings.theme==="system"?"light":settings.theme==="light"?"dark":"system";
-  save(); applyTheme(); toast(`表示: ${settings.theme==="system"?"端末設定":settings.theme==="light"?"ライト":"ダーク"}`);
-}
-function savePlanInputs(){
-  settings.targetDate=$("#targetDate").value||"";
-  settings.dailyQuota=clamp(parseInt($("#dailyQuota").value)||30,1,500);
-  $("#dailyQuota").value=settings.dailyQuota;
-  save();
-}
-function autoQuota(){
-  settings.targetDate=$("#targetDate").value||settings.targetDate||"";
-  const plan=planningData();
-  if(plan.needed==null){ toast(settings.targetDate?"目標日が過ぎています":"先に目標日を設定してください"); return; }
-  settings.dailyQuota=Math.max(1,plan.needed); $("#dailyQuota").value=settings.dailyQuota; save(); toast(`1日 ${settings.dailyQuota} 語に設定しました`);
-}
+function cycleTheme(){ settings.theme=settings.theme==="system"?"light":settings.theme==="light"?"dark":"system"; persist(); applyTheme(); toast(`表示: ${settings.theme==="system"?"端末設定":settings.theme==="light"?"ライト":"ダーク"}`); }
 
-// Events
-$("#applyPresetBtn").onclick=()=>{const [a,b]=$("#rangePreset").value.split("-").map(Number);$("#rangeStart").value=a;$("#rangeEnd").value=b;readRange();toast(`${a}–${b} に設定しました`)};
-$("#rangeStart").onchange=readRange; $("#rangeEnd").onchange=readRange; $("#sessionSize").onchange=readRange; $("#shuffleToggle").onchange=readRange;
-$$("#deckFilter button").forEach(b=>b.onclick=()=>{settings.filter=b.dataset.filter;$$("#deckFilter button").forEach(x=>x.classList.toggle("active",x===b));save();});
-$("#targetDate").onchange=savePlanInputs; $("#dailyQuota").onchange=savePlanInputs; $("#autoQuotaBtn").onclick=autoQuota;
-$("#startTodayBtn").onclick=startToday; $("#startTripleBtn").onclick=startTripleChallenge;
-$("#startStudyBtn").onclick=startStudy; $("#startQuizBtn").onclick=startQuiz;
-$("#flashcard").onclick=revealStudy; $("#flashcard").onkeydown=e=>{if(e.key===" "||e.key==="Enter"){e.preventDefault();revealStudy();}};
-$$('[data-rating]').forEach(b=>b.onclick=()=>finishRating(b.dataset.rating));
-$("#studySpeakBtn").onclick=e=>{e.stopPropagation();speak(studyDeck[studyPos]?.word||"")};
-$("#studyStarBtn").onclick=()=>{const w=studyDeck[studyPos];if(w)$("#studyStarBtn").textContent=toggleStar(w.id)?"★":"☆"};
-$$(".quiz-mode button").forEach(b=>b.onclick=()=>{
-  settings.quizMode=b.dataset.mode; $$(".quiz-mode button").forEach(x=>x.classList.toggle("active",x===b)); save(); startQuiz();
-});
-$("#quizSpeakBtn").onclick=()=>speak(currentQuizItem()?.w?.word||"");
-$("#quizStarBtn").onclick=()=>{const w=currentQuizItem()?.w;if(w)$("#quizStarBtn").textContent=toggleStar(w.id)?"★":"☆"};
-$("#spellSubmit").onclick=submitSpell; $("#spellInput").onkeydown=e=>{if(e.key==="Enter") quizAnswered?nextQuiz():submitSpell();};
-$("#multiSubmitBtn").onclick=answerMulti; $("#nextQuizBtn").onclick=nextQuiz;
-$("#challengeSpeakBtn").onclick=()=>speak(challengeCurrent?.word||"");
-$("#challengeStarBtn").onclick=()=>{if(challengeCurrent)$("#challengeStarBtn").textContent=toggleStar(challengeCurrent.id)?"★":"☆"};
-$("#nextChallengeBtn").onclick=nextChallenge;
-$("#searchInput").oninput=renderSearch;
-$("#exportBtn").onclick=exportProgress; $("#importInput").onchange=e=>{if(e.target.files[0])importProgress(e.target.files[0]);}; $("#resetBtn").onclick=resetProgress;
+buildUnits();
+// Ensure migration is materialized once so totals remain stable across reloads.
+for(const u of UNITS) ensureSenseRecord(u);
+persist();
+$("#targetDate").onchange=savePlan; $("#dailyQuota").onchange=savePlan; $("#autoQuotaBtn").onclick=autoQuota;
+$("#startMissionBtn").onclick=()=>startMission(false); $("#missionSpeakBtn").onclick=()=>speak(currentUnit?.w.word||"");
+$("#missionStarBtn").onclick=()=>{ if(currentUnit)$("#missionStarBtn").textContent=toggleStar(currentUnit.w.id)?"★":"☆"; };
+$("#nextMissionBtn").onclick=nextMission; $("#continueMissionBtn").onclick=()=>startMission(true);
+$("#searchInput").oninput=renderSearch; $("#exportBtn").onclick=exportProgress; $("#importInput").onchange=e=>{if(e.target.files[0])importProgress(e.target.files[0]);}; $("#resetBtn").onclick=resetProgress;
 $("#themeBtn").onclick=cycleTheme;
-$$(".bottom-nav button").forEach(b=>b.onclick=()=>{const v=b.dataset.view;if(v==="study")startStudy();else if(v==="quiz")startQuiz();else go(v);});
 $$('[data-go]').forEach(b=>b.onclick=()=>go(b.dataset.go));
-
-setupPresets(); applySettingsToUI(); refreshHome();
-if("serviceWorker" in navigator) window.addEventListener("load",()=>navigator.serviceWorker.register("sw.js").catch(()=>{}));
+$$(".bottom-nav button").forEach(b=>b.onclick=()=>go(b.dataset.view));
+applyTheme(); refreshHome();
+if("serviceWorker" in navigator)window.addEventListener("load",()=>navigator.serviceWorker.register("sw.js").catch(()=>{}));
