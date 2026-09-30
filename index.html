@@ -87,6 +87,14 @@
         <p class="tiny" id="planHint">3553語義をそれぞれ3回正解すると全クリです。</p>
       </div>
 
+      <div class="card section-card widget-connect-card">
+        <div class="section-head"><div><div class="eyebrow">HOME SCREEN WIDGET</div><h3>Scriptable ウィジェット</h3></div><span class="accent-chip">NEW</span></div>
+        <p class="widget-explain">今日のノルマ達成率や残り正解数をホーム画面に表示。学習記録を外部サーバーに送らず、Scriptableに直接引き渡します。</p>
+        <button class="widget-sync-btn" id="syncWidgetBtn">↗ ウィジェットに現在の進捗を同期</button>
+        <label class="widget-auto"><input type="checkbox" id="autoStartOnOpen"><span><b>アプリを開いたら学習を始める</b><small>ONにすると、ウィジェットから開いたとき学習に進みやすくなります。通常のアプリアイコンから開いた場合も自動開始します。</small></span></label>
+        <p class="tiny">最初にScriptableへ「Vocab1935Widget」のスクリプトを登録してください。同期はこのボタンを押した時点の記録です。ウィジェットへの描画反映時刻はiOSが決めます。</p>
+      </div>
+
       <div class="card section-card">
         <div class="section-head"><div><div class="eyebrow">QUIZ DESIGN</div><h3>1画面で完結</h3></div></div>
         <div class="flow-list">
@@ -160,6 +168,7 @@
           <div><b id="completeWords">0</b><span>単語クリア</span></div>
         </div>
         <button class="primary" id="continueMissionBtn">もう少し続ける</button>
+        <button class="widget-sync-btn" id="completeWidgetBtn">↗ 今日の達成率をウィジェットに同期</button>
         <button class="secondary" data-go="home">今日はここまで</button>
       </div>
     </section>

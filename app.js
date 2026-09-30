@@ -12,7 +12,7 @@ const $$ = s => [...document.querySelectorAll(s)];
 let progress = loadJSON(KEY, {});
 let activity = loadJSON(ACTIVITY_KEY, {});
 const legacySettings = loadJSON(SETTINGS_KEY, {});
-let settings = Object.assign({ theme:"system", targetDate:"", dailyQuota:100, mode:"mixed" }, legacySettings);
+let settings = Object.assign({ theme:"system", targetDate:"", dailyQuota:100, mode:"mixed", autoStartOnOpen:false }, legacySettings);
 if(!["en-ja","ja-en","mixed"].includes(settings.mode)) settings.mode="mixed";
 settings.dailyQuota = clamp(parseInt(settings.dailyQuota)||100, 1, 2000);
 
@@ -195,6 +195,7 @@ function refreshHome(){
   else { pace.textContent=`+${(plan.needed-quota).toLocaleString()}/日`; pace.className="status-pill warn"; hint.textContent=`目標日に間に合わせるには、あと1日 ${(plan.needed-quota).toLocaleString()} 正解増やす必要があります。`; }
   $("#startMissionBtn").textContent = m.remaining===0 ? "全クリ済み" : (t.hits>=quota ? `今日達成済み · ${modeText()}で続ける` : `${modeText()}で今日のノルマを始める`);
   $("#startMissionBtn").disabled = m.remaining===0;
+  $("#autoStartOnOpen").checked=!!settings.autoStartOnOpen;
   refreshModeUI();
 }
 function savePlan(){ settings.targetDate=$("#targetDate").value||""; settings.dailyQuota=clamp(parseInt($("#dailyQuota").value)||100,1,2000); $("#dailyQuota").value=settings.dailyQuota; persist(); refreshHome(); }
@@ -405,6 +406,32 @@ function resetProgress(){
   }
 }
 function applyTheme(){ const dark=settings.theme==="dark"||(settings.theme==="system"&&matchMedia("(prefers-color-scheme: dark)").matches); document.documentElement.dataset.theme=dark?"dark":"light"; const meta=$("#themeColorMeta"); if(meta) meta.setAttribute("content",dark?"#080d16":"#f4f5f7"); }
+function siteRootURL(){
+  // Use the exact root used to install the PWA. A trailing slash is important
+  // when Scriptable later opens it via the iOS webapp:// scheme.
+  return new URL("./", location.href).href;
+}
+function widgetPayload(){
+  const m=missionData(), t=todayStats(), today=localDateKey();
+  return {
+    version:1, date:today, hits:t.hits, quota:settings.dailyQuota,
+    answered:t.answered, correct:t.correct, remaining:m.remaining,
+    total:m.total, overallHits:m.hits, clearedUnits:m.clearedUnits,
+    clearedWords:m.clearedWords, streak:streakCount(), mode:settings.mode,
+    targetDate:settings.targetDate||"", accent:getComputedStyle(document.documentElement).getPropertyValue("--accent").trim(),
+    siteUrl:siteRootURL(), updatedAt:new Date().toISOString(),
+    week:Array.from({length:7},(_,i)=>{ const day=shiftDateKey(today,i-6); return {date:day,hits:activity[day]?.missionHits||0}; })
+  };
+}
+function syncWidget(){
+  try{
+    persist();
+    const payload=widgetPayload();
+    const url="scriptable:///run/Vocab1935Widget?payload="+encodeURIComponent(JSON.stringify(payload));
+    toast("Scriptableに進捗を送ります");
+    setTimeout(()=>{ location.href=url; },140);
+  }catch(e){ console.error(e); toast("同期用データを作成できませんでした"); }
+}
 function cycleTheme(){ settings.theme=settings.theme==="system"?"light":settings.theme==="light"?"dark":"system"; persist(); applyTheme(); toast(`表示: ${settings.theme==="system"?"端末設定":settings.theme==="light"?"ライト":"ダーク"}`); }
 
 buildUnits();
@@ -420,6 +447,12 @@ $("#missionStarBtn").onclick=()=>{ if(currentUnit) $("#missionStarBtn").textCont
 $("#nextMissionBtn").onclick=()=>{ if(!$("#nextMissionBtn").disabled) nextMission(); };
 $("#continueMissionBtn").onclick=()=>startMission(true);
 $("#searchInput").oninput=renderSearch; $("#exportBtn").onclick=exportProgress; $("#importInput").onchange=e=>{if(e.target.files[0]) importProgress(e.target.files[0]);}; $("#resetBtn").onclick=resetProgress;
+$("#syncWidgetBtn").onclick=syncWidget;
+$("#completeWidgetBtn").onclick=syncWidget;
+$("#autoStartOnOpen").onchange=e=>{
+  settings.autoStartOnOpen=e.target.checked; persist();
+  toast(settings.autoStartOnOpen?"次回起動から学習を自動開始":"自動開始をオフにしました");
+};
 $("#themeBtn").onclick=cycleTheme; $("#accentBtn").onclick=()=>{ setRandomAccent(true); toast("差し色を変えました"); };
 $$("#modeSegment button").forEach(b=>b.onclick=()=>setMode(b.dataset.mode));
 $$('[data-go]').forEach(b=>b.onclick=()=>go(b.dataset.go));
@@ -428,9 +461,24 @@ scheduleViewportSync();
 window.addEventListener("resize",scheduleViewportSync,{passive:true});
 window.addEventListener("orientationchange",scheduleViewportSync,{passive:true});
 window.addEventListener("pageshow",scheduleViewportSync,{passive:true});
-document.addEventListener("visibilitychange",()=>{ if(!document.hidden) scheduleViewportSync(); });
+document.addEventListener("visibilitychange",()=>{
+  if(!document.hidden){
+    scheduleViewportSync();
+    // Also used when the widget focuses an already-running PWA.
+    if(settings.autoStartOnOpen && !$("#missionView").classList.contains("active") &&
+       $("#homeView").classList.contains("active") && missionData().remaining>0){
+      setTimeout(()=>{ if(!document.hidden && $("#homeView").classList.contains("active")) startMission(false); },240);
+    }
+  }
+});
 if(window.visualViewport && !IS_STANDALONE){
   window.visualViewport.addEventListener("resize",scheduleViewportSync,{passive:true});
   window.visualViewport.addEventListener("scroll",scheduleViewportSync,{passive:true});
+}
+// ?study=1 is useful on platforms that support deep links into installed PWAs.
+// On iOS the webapp:// handler may reopen the PWA at its original URL; the
+// optional autoStartOnOpen setting above covers that path.
+if((settings.autoStartOnOpen || new URLSearchParams(location.search).has("study")) && missionData().remaining>0){
+  setTimeout(()=>{ if(!document.hidden && $("#homeView").classList.contains("active")) startMission(false); },330);
 }
 if("serviceWorker" in navigator) window.addEventListener("load",()=>navigator.serviceWorker.register("sw.js").catch(()=>{}));

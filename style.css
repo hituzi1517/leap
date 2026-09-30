@@ -88,3 +88,12 @@ main{max-width:760px;margin:auto;padding:10px 14px 34px}.view{display:none}.view
 @media(min-width:640px){main{padding-left:24px;padding-right:24px}.topbar{padding-left:28px;padding-right:28px}.quiz-panel{padding:16px}}
 
 @media(max-height:720px){html.pwa-standalone .mission-shell{padding-top:7px}}
+
+/* Scriptable widget link: larger touch targets than the small settings chips. */
+.widget-explain{font-size:13px;line-height:1.65;color:var(--muted);margin:1px 0 14px}
+.widget-sync-btn{width:100%;min-height:51px;border:1.5px solid var(--accent);border-radius:14px;background:rgba(var(--accent-rgb),.1);color:var(--accent);font-size:14px;font-weight:820;padding:13px 10px}
+.widget-auto{display:flex;align-items:flex-start;gap:12px;margin-top:15px;padding:13px;border-radius:13px;background:var(--surface2);cursor:pointer}
+.widget-auto input{flex:none;accent-color:var(--accent);width:20px;height:20px;margin:2px 0 0}
+.widget-auto b{display:block;font-size:13px;line-height:1.45}
+.widget-auto small{display:block;margin-top:5px;color:var(--muted);font-size:11px;line-height:1.5}
+.complete-card>.widget-sync-btn{margin-top:14px}
