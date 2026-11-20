@@ -1,222 +1,48 @@
-<!doctype html>
-<html lang="ja">
-<head>
-  <meta charset="utf-8">
-  <meta name="viewport" content="width=device-width,initial-scale=1,viewport-fit=cover">
-  <meta name="theme-color" content="#4f46e5" id="themeColorMeta">
-  <meta name="apple-mobile-web-app-capable" content="yes">
-  <meta name="apple-mobile-web-app-status-bar-style" content="default">
-  <meta name="apple-mobile-web-app-title" content="Vocab 1935">
-  <title>Vocab 1935</title>
-  <script>
-    if ((window.matchMedia && window.matchMedia("(display-mode: standalone)").matches) || window.navigator.standalone === true) {
-      document.documentElement.classList.add("pwa-standalone");
-    }
-  </script>
-  <link rel="manifest" href="manifest.webmanifest">
-  <link rel="apple-touch-icon" href="icons/icon-192.png">
-  <link rel="icon" href="icons/icon-192.png">
-  <link rel="stylesheet" href="style.css">
-</head>
-<body>
+<!doctype html><html lang="ja"><head>
+<meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1,viewport-fit=cover">
+<meta id="themeMeta" name="theme-color" content="#f4f5f8">
+<meta name="apple-mobile-web-app-capable" content="yes"><meta name="apple-mobile-web-app-status-bar-style" content="default"><meta name="apple-mobile-web-app-title" content="Vocab 1935">
+<link rel="manifest" href="manifest.webmanifest"><link rel="apple-touch-icon" href="icons/icon-192.png"><link rel="stylesheet" href="style.css"><title>Vocab 1935</title>
+<script>if((window.matchMedia&&matchMedia('(display-mode: standalone)').matches)||navigator.standalone===true)document.documentElement.classList.add('pwa-standalone');</script>
+</head><body>
 <div id="app">
-  <header class="topbar">
-    <div>
-      <div class="eyebrow">ENGLISH VOCABULARY</div>
-      <h1>Vocab 1935</h1>
-    </div>
-    <div class="header-actions">
-      <button class="icon-btn accent-dot" id="accentBtn" aria-label="差し色を変える"><i></i></button>
-      <button class="icon-btn" id="themeBtn" aria-label="テーマ切替">◐</button>
-    </div>
-  </header>
-
-  <main>
-    <section class="view active" id="homeView">
-      <div class="hero card">
-        <div>
-          <div class="eyebrow">TOTAL MISSION</div>
-          <h2><span id="overallPct">0</span>%</h2>
-          <p><b id="earnedHits">0</b> / <span id="totalHits">10,659</span> 有効正解</p>
-        </div>
-        <div class="ring" id="progressRing"><span id="ringPct">0%</span></div>
-      </div>
-
-      <div class="card section-card mode-card">
-        <div class="section-head compact-head">
-          <div><div class="eyebrow">QUESTION MODE</div><h3>出題モード</h3></div>
-          <span class="accent-chip" id="modeHint">英→日 / 日→英</span>
-        </div>
-        <div class="segmented" id="modeSegment">
-          <button data-mode="en-ja">英 → 日</button>
-          <button data-mode="ja-en">日 → 英</button>
-          <button data-mode="mixed" class="active">ごちゃまぜ</button>
-        </div>
-        <p class="tiny">進捗は3モード共通です。ごちゃまぜでは英→日と日→英を偏りすぎないように出題します。</p>
-      </div>
-
-      <div class="stat-grid four">
-        <div class="stat card"><b id="clearedUnits">0</b><span>語義クリア / 3553</span></div>
-        <div class="stat card"><b id="clearedWords">0</b><span>単語クリア / 1935</span></div>
-        <div class="stat card"><b id="remainingHits">10659</b><span>残り正解</span></div>
-        <div class="stat card"><b id="streakCount">0</b><span>連続学習日</span></div>
-      </div>
-
-      <div class="card section-card mission-card">
-        <div class="section-head">
-          <div><div class="eyebrow">ONE DAILY MISSION</div><h3>今日の学習</h3></div>
-          <span class="status-pill" id="paceStatus">未設定</span>
-        </div>
-        <div class="plan-grid">
-          <label>全クリ目標日<input id="targetDate" type="date"></label>
-          <label>1日のノルマ<input id="dailyQuota" type="number" min="1" max="2000" value="100"><small>有効正解 / 日</small></label>
-        </div>
-        <div class="plan-summary">
-          <div><span>目標日まで</span><b id="daysLeft">—</b><small>日</small></div>
-          <div><span>残り</span><b id="planRemaining">10,659</b><small>正解</small></div>
-          <div><span>必要ペース</span><b id="neededPerDay">—</b><small>正解/日</small></div>
-        </div>
-        <div class="daily-goal-row">
-          <div>
-            <b>今日 <span id="todayHits">0</span> / <span id="todayQuotaText">100</span> 正解</b>
-            <div class="bar tall"><i id="dailyGoalBar"></i></div>
-          </div>
-          <button class="secondary compact" id="autoQuotaBtn">目標日から自動設定</button>
-        </div>
-        <button class="primary giant" id="startMissionBtn">今日のノルマを始める</button>
-        <p class="tiny" id="planHint">3553語義をそれぞれ3回正解すると全クリです。</p>
-      </div>
-
-      <div class="card section-card widget-connect-card">
-        <div class="section-head"><div><div class="eyebrow">HOME SCREEN WIDGET</div><h3>Scriptable ウィジェット</h3></div><span class="accent-chip">NEW</span></div>
-        <p class="widget-explain">今日のノルマ達成率や残り正解数をホーム画面に表示。学習記録を外部サーバーに送らず、Scriptableに直接引き渡します。</p>
-        <button class="widget-sync-btn" id="syncWidgetBtn">↗ ウィジェットに現在の進捗を同期</button>
-        <label class="widget-auto"><input type="checkbox" id="autoStartOnOpen"><span><b>アプリを開いたら学習を始める</b><small>ONにすると、ウィジェットから開いたとき学習に進みやすくなります。通常のアプリアイコンから開いた場合も自動開始します。</small></span></label>
-        <p class="tiny">最初にScriptableへ「Vocab1935Widget」のスクリプトを登録してください。同期はこのボタンを押した時点の記録です。ウィジェットへの描画反映時刻はiOSが決めます。</p>
-      </div>
-
-      <div class="card section-card">
-        <div class="section-head"><div><div class="eyebrow">QUIZ DESIGN</div><h3>1画面で完結</h3></div></div>
-        <div class="flow-list">
-          <div><b>1</b><span>4択は2×2配置。スマホでは問題・4択・解答・「次へ」をできるだけ1画面に収めます。</span></div>
-          <div><b>2</b><span>解答後は正解以外の3択にも対応する英単語／日本語を表示します。</span></div>
-          <div><b>3</b><span>英語は問題文・選択肢どちらからでも読み上げできます。</span></div>
-          <div><b>4</b><span>差し色は起動するたびランダム。右上の色ボタンでも引き直せます。</span></div>
-        </div>
-      </div>
-
-      <div class="card section-card">
-        <div class="section-head"><div><div class="eyebrow">DATA</div><h3>学習データ</h3></div></div>
-        <div class="data-actions">
-          <button class="secondary" id="exportBtn">進捗を書き出す</button>
-          <label class="secondary file-label">進捗を読み込む<input id="importInput" type="file" accept="application/json"></label>
-          <button class="danger ghost" id="resetBtn">進捗をリセット</button>
-        </div>
-        <p class="tiny">学習記録はこの端末のブラウザ内に保存されます。旧Vocab 1935の進捗データも引き継げます。</p>
-      </div>
-    </section>
-
-    <section class="view mission-overlay" id="missionView">
-      <div class="mission-shell">
-        <div class="mission-head">
-          <button class="back-btn" data-go="home" aria-label="戻る">‹</button>
-          <div class="mission-meter">
-            <div><span id="directionBadge" class="direction-badge">英 → 日</span> 今日 <b><span id="missionTodayHits">0</span>/<span id="missionQuota">100</span></b></div>
-            <div class="bar"><i id="missionBar"></i></div>
-          </div>
-          <button class="icon-btn" id="missionStarBtn" aria-label="お気に入り">☆</button>
-        </div>
-
-        <div class="quiz-panel card">
-          <div class="question-row">
-            <span id="missionWordNo">No. 1</span>
-            <span id="senseLabel"></span>
-            <span class="hit-pill" id="senseHit">0 / 3</span>
-          </div>
-
-          <div class="prompt-zone">
-            <div class="quiz-prompt" id="missionPrompt">agree</div>
-            <button class="speak-btn" id="missionSpeakBtn">🔊 読み上げ</button>
-          </div>
-
-          <div id="missionChoices" class="choices-grid"></div>
-
-          <div id="missionFeedback" class="feedback-strip neutral">
-            1つ選んでください
-          </div>
-
-          <button class="primary next-fixed" id="nextMissionBtn" disabled>選択してください</button>
-        </div>
-
-        <div class="mission-foot">
-          <span>残り <b id="missionRemaining">10,659</b></span>
-          <span>連続 <b id="comboCount">0</b></span>
-          <span>正答率 <b id="todayAccuracy">—</b></span>
-        </div>
-      </div>
-    </section>
-
-    <section class="view" id="completeView">
-      <div class="complete-card card">
-        <div class="complete-icon">✓</div>
-        <div class="eyebrow">TODAY COMPLETE</div>
-        <h2>今日のノルマ達成</h2>
-        <p><b id="completeTodayHits">0</b> 正解まで進みました。</p>
-        <div class="complete-grid">
-          <div><b id="completeRemaining">0</b><span>全クリまで残り</span></div>
-          <div><b id="completeUnits">0</b><span>語義クリア</span></div>
-          <div><b id="completeWords">0</b><span>単語クリア</span></div>
-        </div>
-        <button class="primary" id="continueMissionBtn">もう少し続ける</button>
-        <button class="widget-sync-btn" id="completeWidgetBtn">↗ 今日の達成率をウィジェットに同期</button>
-        <button class="secondary" data-go="home">今日はここまで</button>
-      </div>
-    </section>
-
-    <section class="view" id="searchView">
-      <div class="search-box card"><input id="searchInput" type="search" placeholder="英単語・日本語で検索"></div>
-      <div id="searchResults" class="word-list"></div>
-    </section>
-
-    <section class="view" id="statsView">
-      <div class="card section-card">
-        <div class="eyebrow">MISSION</div><h3>全体進捗</h3>
-        <div class="big-stats">
-          <div><b id="statsHits">0</b><span>累計有効正解</span></div>
-          <div><b id="statsClearedUnits">0</b><span>語義クリア</span></div>
-          <div><b id="statsClearedWords">0</b><span>単語クリア</span></div>
-        </div>
-        <div class="distribution" id="hitDistribution"></div>
-      </div>
-      <div class="card section-card">
-        <div class="eyebrow">CONSISTENCY</div><h3>継続</h3>
-        <div class="big-stats">
-          <div><b id="statsStreak">0</b><span>連続学習日</span></div>
-          <div><b id="statsToday">0</b><span>今日の正解</span></div>
-          <div><b id="statsAccuracy">—</b><span>累計正答率</span></div>
-        </div>
-        <div id="weekStrip" class="week-strip"></div>
-      </div>
-      <div class="card section-card">
-        <div class="eyebrow">AUTO REVIEW</div><h3>間違えやすい語義</h3>
-        <p class="tiny stats-copy">通常の「今日の学習」の中で自動的に少し優先して出題します。</p>
-        <div id="hardList" class="hard-list"></div>
-      </div>
-      <div class="card section-card">
-        <div class="eyebrow">BY 100 WORDS</div><h3>100語ごとの完全クリア率</h3>
-        <div id="chunkStats" class="chunk-stats"></div>
-      </div>
-    </section>
-  </main>
-
-  <nav class="bottom-nav three">
-    <button data-view="home" class="active"><span>⌂</span>学習</button>
-    <button data-view="search"><span>⌕</span>単語一覧</button>
-    <button data-view="stats"><span>≡</span>記録</button>
-  </nav>
-</div>
-<div class="toast" id="toast"></div>
-<script src="words.js"></script>
-<script src="app.js"></script>
-</body>
-</html>
+<header class="topbar"><div><span class="eyebrow">ENGLISH STUDY / 1935</span><h1>Vocab <span>1935</span></h1></div><div class="top-actions"><button id="accentBtn" aria-label="差し色変更" class="roundbtn"><span class="accent-dot"></span></button><button id="themeBtn" aria-label="テーマ変更" class="roundbtn">◐</button></div></header>
+<main>
+<section class="view active" id="homeView">
+  <div class="hero card"><div><span class="eyebrow">通常学習 · 3回正解</span><div class="hero-number"><strong id="mainPercent">0</strong><span>%</span></div><p><b id="mainHits">0</b> / <b id="mainTotal">10,659</b> 有効正解</p></div><div class="ring" id="mainRing"><span id="ringPercent">0%</span></div></div>
+  <section class="card panel"><div class="section-header"><div><span class="eyebrow">QUESTION MODE</span><h2>出題方向</h2></div></div><div class="mode-switch" id="mainModes"><button data-m="en-ja">英 → 日</button><button data-m="ja-en">日 → 英</button><button data-m="mixed">ごちゃまぜ</button></div></section>
+  <div class="stats-grid triple"><div class="stat card"><strong id="mainCleared">0</strong><span>クリア語義</span></div><div class="stat card"><strong id="mainWords">0</strong><span>クリア単語</span></div><div class="stat card"><strong id="mainRemaining">10,659</strong><span>残り正解</span></div></div>
+  <section class="card panel"><div class="section-header"><div><span class="eyebrow">DAILY MISSION</span><h2>目標日と1日のノルマ</h2></div><span id="pacePill" class="pill">未設定</span></div><div class="two-inputs"><label>全クリ目標日<input id="goalDate" type="date"></label><label>ノルマ（正解/日）<input id="mainQuota" type="number" min="1" max="3000" inputmode="numeric"></label></div><div class="stats-grid triple inset"><div class="stat"><strong id="daysLeft">—</strong><span>残り日数</span></div><div class="stat"><strong id="requiredDaily">—</strong><span>必要/日</span></div><div class="stat"><strong id="streak">0</strong><span>連続学習日</span></div></div><div class="progress-heading"><b>今日の達成</b><b><span id="todayCorrect">0</span> / <span id="todayQuota">100</span></b></div><div class="track"><div id="mainTodayBar"></div></div><div class="row-actions"><button id="autoQuotaBtn" class="subtle">目標日からノルマを計算</button></div><button id="mainStart" class="primary wide">通常学習を始める <span>→</span></button></section>
+  <section class="card panel widget-panel"><span class="eyebrow">SCRIPTABLE WIDGET</span><h2>ウィジェット連携</h2><p class="note">これまでのScriptable用ウィジェットにも、今日の達成数を引き続き渡せます。</p><button id="syncWidgetBtn" class="secondary wide">ウィジェットに進捗を同期</button><label class="check-row"><input id="autoStart" type="checkbox"><span>アプリを開いたら通常学習を自動開始する</span></label></section>
+</section>
+<section class="view" id="pointsView">
+  <div class="points-hero card"><span class="eyebrow">NEW MODE / POINT LADDER</span><div class="points-top"><div><h2>ポイント制</h2><p>1935語 · 1点で合格 · 完全ランダム</p></div><div class="points-pct"><b id="pointsPct">0%</b><span>合格率</span></div></div><div class="track"><div id="pointsBar"></div></div></div>
+  <div class="stats-grid triple"><div class="stat card"><strong id="pointsPassed">0</strong><span>合格（＋1点）</span></div><div class="stat card"><strong id="pointsSeen">0</strong><span>初回解放済み</span></div><div class="stat card"><strong id="pointsRemaining">1935</strong><span>未合格</span></div></div>
+  <section class="card panel points-goal-card">
+    <span class="eyebrow">TOTAL POINTS</span>
+    <div class="point-score-head"><div><h2>現在の合計ポイント</h2><div class="point-total"><strong id="pointsTotalScore">0</strong><span> / <b id="pointsGoalScore">1,935</b> pt</span></div></div><span class="point-goal-mark">GOAL 1935</span></div>
+    <p class="note">不正解によるマイナスも合計します。例：ある単語が−5点なら、＋1点で合格するまでに6回の正解が必要です。</p>
+    <div class="stat-point-remain">全クリまであと <b id="pointsScoreRemaining">1,935</b> pt</div>
+  </section>
+  <section class="card panel"><span class="eyebrow">QUESTION MODE</span><h2>出題方向</h2><div id="pointsModes" class="mode-switch"><button data-m="en-ja">英 → 日</button><button data-m="ja-en">日 → 英</button><button data-m="mixed">ごちゃまぜ</button></div><p class="note">モードを切り替えても各単語のポイントは共通です。</p></section>
+  <section class="card panel points-daily-card">
+    <div class="section-header"><div><span class="eyebrow">DAILY POINT MISSION</span><h2>期限と1日のポイントノルマ</h2></div><span id="pointPacePill" class="pill">目標日未設定</span></div>
+    <div class="two-inputs"><label>1935pt 達成目標日<input id="pointGoalDate" type="date"></label><label>ノルマ（正味pt/日）<input id="pointQuota" type="number" min="1" max="1000000" inputmode="numeric"></label></div>
+    <div class="stats-grid double inset"><div class="stat"><strong id="pointDaysLeft">—</strong><span>目標日までの日数（今日含む）</span></div><div class="stat"><strong id="pointRequiredDaily">—</strong><span>必要ポイント / 日</span></div></div>
+    <div class="progress-heading"><b>今日の獲得ポイント</b><b><span id="pointTodayScore">0</span> / <span id="pointTodayQuota">30</span> pt</b></div>
+    <div class="track"><div id="pointTodayBar"></div></div>
+    <p class="point-today-details" id="pointTodayBreakdown">今日の正解 0回 · 不正解 0回 · 初回 0語</p>
+    <p class="note">今日の獲得pt＝2回目以降の正解数 − 不正解数。初回は±0pt。マイナスになる日もあり、翌日は0ptから数えます。全体合計も不正解で減り、必要な残りポイントが増えます。</p>
+    <div class="row-actions"><button id="pointAutoQuotaBtn" class="subtle">目標日からノルマを自動設定</button></div>
+    <button id="pointsStart" class="primary wide">今日のポイントノルマを始める →</button>
+  </section>
+  <section class="card panel points-rules"><span class="eyebrow">THE RULES</span><h2>ポイントの仕組み</h2><div class="rules"><div><span class="rule-icon">0</span><p><b>初回は0点</b><small>初めて出題された時点でロック解除。正誤を問わず得点は変わりません。</small></p></div><div><span class="rule-icon">±</span><p><b>2回目以降は加減</b><small>正解＋1点、不正解−1点。マイナスは無制限です。</small></p></div><div><span class="rule-icon">✓</span><p><b>＋1点で合格</b><small>合格後は出題しません。未合格は得点に関係なく同じ確率で抽選。</small></p></div><div><span class="rule-icon">①</span><p><b>多義語は毎回1意味</b><small>①を約65%の確率で優先し、残りの意味をランダムに選びます。</small></p></div></div><p class="note centered">通常の3回クリアの進捗とは別管理。ポイント制だけをリセットできます。</p></section>
+  <section class="card panel"><div class="section-header"><div><span class="eyebrow">POINT BREAKDOWN</span><h2>得点の内訳</h2></div></div><div class="breakdown" id="pointsBreakdown"></div><button id="pointsReset" class="danger wide">ポイント制の記録だけリセット</button></section>
+</section>
+<section class="view" id="searchView"><section class="card search-wrap"><input id="searchInput" type="search" placeholder="英単語または日本語で検索"></section><div id="searchList" class="search-list"></div></section>
+<section class="view" id="statsView"><section class="card panel"><span class="eyebrow">OVERVIEW</span><h2>学習記録</h2><div class="stats-grid triple inset"><div class="stat"><strong id="statMain">0</strong><span>通常・有効正解</span></div><div class="stat"><strong id="statPoints">0</strong><span>ポイント合格</span></div><div class="stat"><strong id="statDay">0</strong><span>今日の解答数</span></div></div></section><section class="card panel"><span class="eyebrow">HISTORY</span><h2>直近7日</h2><div class="week" id="weekStrip"></div></section><section class="card panel"><span class="eyebrow">BACKUP</span><h2>学習データ</h2><p class="note">通常学習・ポイント制の両方を一度に書き出せます。</p><button id="exportBtn" class="secondary wide">進捗をバックアップ（JSON）</button><label class="filelabel">バックアップを読み込む<input id="importFile" type="file" accept=".json,application/json"></label></section></section>
+<section class="view quiz-view" id="quizView"><div class="quiz-shell"><div class="quiz-header"><button id="quizBack" class="back-btn" aria-label="戻る">‹</button><div class="quiz-header-text"><span id="quizModeTag" class="quiz-tag">ポイント制 / 英 → 日</span><span id="quizHeaderInfo">未合格 1935語</span></div><button id="quizAudio" class="back-btn" aria-label="英語を読み上げ">🔊</button></div><div class="quiz-card card"><div class="quiz-meta"><span id="quizWordNo">No. 1</span><span id="quizSense">①</span><span id="quizScore" class="score-bubble">LOCKED</span></div><div class="quiz-prompt" id="quizPrompt">agree</div><div id="quizOptions" class="choices"></div><div id="quizResult" class="quiz-result">1つ選んでください</div><button id="quizNext" class="primary wide next-btn" disabled>回答を選択してください</button></div><div id="quizFooter" class="quiz-footer">すべての未合格単語から均等抽選</div></div></section>
+<section class="view" id="doneView"><div class="card done-card"><div class="done-badge">✓</div><h2 id="doneTitle">今日のノルマ達成！</h2><p id="doneMessage"></p><button id="doneContinue" class="primary wide">さらに学習する</button><button id="doneBack" class="secondary wide">学習画面に戻る</button></div></section>
+</main>
+<nav class="bottom-nav"><button data-view="home" class="active"><span>⌂</span>通常学習</button><button data-view="points"><span>★</span>ポイント制</button><button data-view="search"><span>⌕</span>単語一覧</button><button data-view="stats"><span>▥</span>記録</button></nav>
+<div id="toast" class="toast"></div></div><script src="words.js"></script><script src="app.js"></script></body></html>
